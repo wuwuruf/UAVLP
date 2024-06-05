@@ -22,8 +22,8 @@ import numpy as np
 
 
 # 读取npy文件
-# data = np.load('../data/UAV_data/UAV_RPGM_360_r=500_edge_seq.npy', allow_pickle=True)
-data = np.load('../emb_DySAT/emb_DySAT_UAV_RPGM_360_r=300.npy', allow_pickle=True)
+data = np.load('../data/UAV_data/UAV_RPGM_360_r=500_edge_seq.npy', allow_pickle=True)
+# data = np.load('../emb_DySAT/emb_DySAT_UAV_RPGM_360_r=300.npy', allow_pickle=True)
 
 # 显示npy文件中的内容
 print("Numpy数组的形状：", data.shape)

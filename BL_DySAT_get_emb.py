@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument('--time_steps', type=int, nargs='?', default=361,
                         help="total time steps used for train, eval and test")
     # Experimental settings.
-    parser.add_argument('--dataset', type=str, nargs='?', default='UAV_RPGM_360_r=300',
+    parser.add_argument('--dataset', type=str, nargs='?', default='UAV_RPGM_360_r=400',
                         help='dataset name')
     parser.add_argument('--GPU_ID', type=int, nargs='?', default=0,
                         help='GPU_ID (0/1 etc.)')
@@ -93,7 +93,7 @@ if __name__ == "__main__":
                         help='Initial learning rate for self-attention model.')
     parser.add_argument('--spatial_drop', type=float, nargs='?', default=0.1,
                         help='Spatial (structural) attention Dropout (1 - keep probability).')
-    parser.add_argument('--temporal_drop', type=float, nargs='?', default=0.5,
+    parser.add_argument('--temporal_drop', type=float, nargs='?', default=0.1,  # 0.5
                         help='Temporal attention Dropout (1 - keep probability).')
     parser.add_argument('--weight_decay', type=float, nargs='?', default=0.0005,
                         help='Initial learning rate for self-attention model.')
@@ -190,4 +190,4 @@ if __name__ == "__main__":
             emb_list.append(emb)
 
     # 只包含了下标为[window - 1, time_steps - 2]的嵌入，用来预测下标为[window, time_steps - 1]的链路，嵌入矩阵数量为num_snaps - win_size
-    np.save('emb_DySAT/emb_DySAT_%s.npy' % args.dataset, np.array(emb_list))
+    np.save('emb_DySAT/emb_DySAT_%s_1.npy' % args.dataset, np.array(emb_list))

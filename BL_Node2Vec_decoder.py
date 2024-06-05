@@ -24,7 +24,7 @@ class FCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(FCNN, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.fc2 = nn.Linear(hidden_dim, num_nodes)
 
         # # Xavier初始化
         # init.xavier_uniform_(self.fc1.weight)
@@ -35,7 +35,7 @@ class FCNN(nn.Module):
         # He初始化
         nn.init.kaiming_uniform_(self.fc1.weight, mode='fan_in', nonlinearity='relu')
         nn.init.constant_(self.fc1.bias, 0)  # 将偏置初始化为0
-        nn.init.kaiming_uniform_(self.fc2.weight, mode='fan_in', nonlinearity='relu')
+        nn.init.kaiming_uniform_(self.fc2.weight, mode='fan_in', nonlinearity='sigmoid')
         nn.init.constant_(self.fc2.bias, 0)  # 将偏置初始化为0
 
     def forward(self, x):
@@ -60,7 +60,7 @@ max_thres = 100  # Threshold for maximum edge weight
 num_val_snaps = 10
 num_test_snaps = 50  # Number of test snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps
-num_epochs = 10
+num_epochs = 50
 emb_dim = 64
 decoder_hidden_dim = 128
 

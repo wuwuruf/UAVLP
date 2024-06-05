@@ -21,7 +21,7 @@ class FCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(FCNN, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.fc2 = nn.Linear(hidden_dim, num_nodes)
 
         # # Xavier初始化
         # init.xavier_uniform_(self.fc1.weight)
@@ -32,7 +32,7 @@ class FCNN(nn.Module):
         # He初始化
         nn.init.kaiming_uniform_(self.fc1.weight, mode='fan_in', nonlinearity='relu')
         nn.init.constant_(self.fc1.bias, 0)  # 将偏置初始化为0
-        nn.init.kaiming_uniform_(self.fc2.weight, mode='fan_in', nonlinearity='relu')
+        nn.init.kaiming_uniform_(self.fc2.weight, mode='fan_in', nonlinearity='sigmoid')
         nn.init.constant_(self.fc2.bias, 0)  # 将偏置初始化为0
 
     def forward(self, x):
@@ -50,7 +50,7 @@ def setup_seed(seed):
 
 
 setup_seed(0)
-data_name = 'UAV_RPGM_360_r=300'
+data_name = 'UAV_RPGM_360_r=400'
 num_nodes = 100
 num_snaps = 361
 max_thres = 100  # Threshold for maximum edge weight

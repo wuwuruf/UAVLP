@@ -61,12 +61,12 @@ def get_gen_loss(adj_est_list, gnd_list, disc_fake_list, max_thres, alpha, beta,
 
 
 def get_disc_loss(disc_real_list, disc_fake_list, theta):
-    '''
+    """
     Function to define the loss discriminator (in the formal optimization)
     :param disc_real_list: list of discriminator's outputs w.r.t. real inputs
     :param disc_fake_list: list of discriminator's outputs w.r.t. fake inputs
     :return: loss discriminator
-    '''
+    """
     # ====================
     loss = 0.0
     epsilon = 1e-15  # 防止log0
