@@ -12,7 +12,12 @@ from torch.nn.parameter import Parameter
 from torch.nn.modules.module import Module
 
 from torch_geometric.utils import softmax
+from torch_geometric.nn import GCNConv, GATConv
+from torch_geometric.nn.pool.topk_pool import topk, filter_adj
+from torch.nn import Parameter
 from torch_scatter import scatter
+
+from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 
 import copy
 
@@ -22,9 +27,9 @@ class WeightedGAT(Module):
                  input_dim,
                  output_dim,
                  n_heads,
-                 attn_drop,
-                 ffd_drop,
-                 residual):
+                 drop_rate
+                 # residual):
+                 ):
         super(WeightedGAT, self).__init__()
         # 每个头的特征维度
         self.out_dim = output_dim // n_heads
@@ -40,12 +45,12 @@ class WeightedGAT(Module):
 
         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
 
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.ffd_drop = nn.Dropout(ffd_drop)
+        self.attn_drop = nn.Dropout(drop_rate)
+        self.ffd_drop = nn.Dropout(drop_rate)
 
-        self.residual = residual
-        if self.residual:
-            self.lin_residual = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
+        # self.residual = residual
+        # if self.residual:
+        #     self.lin_residual = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
 
         self.xavier_init()
 
@@ -85,11 +90,10 @@ class WeightedGAT(Module):
         out = self.act(scatter(x_j * coefficients[:, :, None], edge_index[1], dim=0, reduce="sum"))
         # 多头的拼接
         out = out.reshape(-1, self.n_heads * self.out_dim)  # [num_nodes, output_dim]
-        if self.residual:
-            out = out + self.lin_residual(feat)
+        # if self.residual:
+        #     out = out + self.lin_residual(feat)
         # 最终的特征
         feat = out
-
 
         return feat
 
@@ -154,3 +158,144 @@ class IGRU(Module):
 
         return next_state
 
+
+class SAGPool(torch.nn.Module):
+    """
+    选择节点，切割edge_index
+    """
+
+    def __init__(self, in_channels, ratio=0.8, Conv=GCNConv, non_linearity=torch.tanh):
+        super(SAGPool, self).__init__()
+        self.in_channels = in_channels
+        self.ratio = ratio
+        self.score_layer = Conv(in_channels, 1)
+        self.non_linearity = non_linearity
+
+    def forward(self, x, edge_index, edge_attr=None):
+        batch = edge_index.new_zeros(x.size(0))
+        score = self.score_layer(x, edge_index).squeeze()
+
+        perm = topk(score, self.ratio, batch)
+        x = x[perm] * self.non_linearity(score[perm]).view(-1, 1)
+        edge_index, _ = filter_adj(
+            edge_index, edge_attr, perm, num_nodes=score.size(0))
+
+        return x, edge_index
+
+
+class HierarchicalPool(torch.nn.Module):
+    """
+    输入为一张图快照，输出为其池化表示，输出为维度 hidden_dim*2 的向量，作为图的表示
+    """
+
+    def __init__(self, feat_dim, hidden_dim, pooling_ratio, n_heads, dropout_ratio):
+        """
+        :param feat_dim:
+        :param hidden_dim:
+        :param pooling_ratio:
+        :param n_heads: 表示其中使用的GAT的注意力头数
+        :param dropout_ratio:
+        """
+        super(HierarchicalPool, self).__init__()
+        self.feat_dim = feat_dim
+        self.hidden_dim = hidden_dim
+        self.n_heads = n_heads
+        # self.emb_dim = emb_dim
+
+        self.pooling_ratio = pooling_ratio
+        self.dropout_ratio = dropout_ratio
+
+        self.conv1 = WeightedGAT(self.feat_dim, self.hidden_dim, n_heads, dropout_ratio)
+        self.pool1 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+        self.conv2 = WeightedGAT(self.hidden_dim, self.hidden_dim, n_heads, dropout_ratio)
+        self.pool2 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+        self.conv3 = WeightedGAT(self.hidden_dim, self.hidden_dim, n_heads, dropout_ratio)
+        self.pool3 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+
+    def forward(self, edge_index, edge_weight, feat):
+        x = F.relu(self.conv1(edge_index, edge_weight, feat))
+        x, edge_index = self.pool1(x, edge_index, None)
+        x1 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
+
+        x = F.relu(self.conv2(x, edge_index))
+        x, edge_index = self.pool2(x, edge_index, None)
+        x2 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
+
+        x = F.relu(self.conv3(x, edge_index))
+        x, edge_index = self.pool3(x, edge_index, None)
+        x3 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
+
+        x = x1 + x2 + x3
+
+        return x
+
+
+class AttMultiAgg(Module):
+    """
+    对三个尺度的表示进行注意力聚合
+    （没用dropout，先看效果）
+    """
+
+    def __init__(self, input_dim, output_dim):
+        """
+        :param input_dim: 等于层次池化层的hidden_dim*2
+        :param output_dim:
+        """
+        super(AttMultiAgg, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.lin = nn.Linear(self.input_dim, self.output_dim, bias=False)  # W 用于对特征线性变换
+        self.att_a = nn.Parameter(torch.Tensor(1, self.output_dim * 2))  # a^T 是列向量
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+
+    def forward(self, micro_x, meso_x, macro_x):
+        micro_x = self.lin(micro_x)
+        meso_x = self.lin(meso_x)
+        macro_x = self.lin(macro_x)
+        # =====================
+        micro_micro_x = torch.cat([micro_x, micro_x], dim=1)  # 沿着列拼接，[节点数, output_dim*2]
+        micro_meso_x = torch.cat([micro_x, meso_x], dim=1)
+        micro_macro_x = torch.cat([micro_x, macro_x], dim=1)
+        # =====================
+        micro_micro_score = self.leaky_relu(torch.matmul(micro_micro_x, self.att_a))  # [节点数, 1]
+        micro_meso_score = self.leaky_relu(torch.matmul(micro_meso_x, self.att_a))
+        micro_macro_score = self.leaky_relu(torch.matmul(micro_macro_x, self.att_a))
+        # =====================
+        att_weight = F.softmax(torch.cat([micro_micro_score, micro_meso_score, micro_macro_score], dim=1),
+                               dim=0)  # 沿着行做softmax
+        # =====================
+        micro_x = att_weight[:, 0] * micro_x
+        meso_x = att_weight[:, 1] * meso_x
+        macro_x = att_weight[:, 2] * macro_x
+        # =====================
+        x = micro_x + meso_x + macro_x
+
+        return x
+
+
+class FCNN(nn.Module):
+    """
+    解码器
+    """
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(FCNN, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+
+        # # Xavier初始化
+        # init.xavier_uniform_(self.fc1.weight)
+        # init.constant_(self.fc1.bias, 0)
+        # init.xavier_uniform_(self.fc2.weight)
+        # init.constant_(self.fc2.bias, 0)
+
+        # He初始化
+        nn.init.kaiming_uniform_(self.fc1.weight, mode='fan_in', nonlinearity='relu')
+        nn.init.constant_(self.fc1.bias, 0)  # 将偏置初始化为0
+        nn.init.kaiming_uniform_(self.fc2.weight, mode='fan_in', nonlinearity='sigmoid')
+        nn.init.constant_(self.fc2.bias, 0)  # 将偏置初始化为0
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x))
+        return x

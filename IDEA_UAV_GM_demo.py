@@ -6,8 +6,8 @@
 
 import torch
 import torch.optim as optim
-from modules.IDEA_try import GenNet_tanh
-from modules.IDEA_try import DiscNet
+from modules.IDEA import GenNet_tanh
+from modules.IDEA import DiscNet
 from modules.loss import get_pre_gen_loss
 from modules.loss import get_gen_loss
 from modules.loss import get_disc_loss
@@ -99,8 +99,8 @@ for i in range(win_size + 1):
 
 # ====================
 # Define the model
-gen_net = GenNet_tanh(FEM_dims, EDM_dims, EAM_dims, dropout_rate, win_size, n_heads).to(device)  # Generator
-# gen_net = GenNet_tanh(FEM_dims, EDM_dims, EAM_dims, dropout_rate).to(device)  # Generator
+# gen_net = GenNet_tanh(FEM_dims, EDM_dims, EAM_dims, dropout_rate, win_size, n_heads).to(device)  # Generator
+gen_net = GenNet_tanh(FEM_dims, EDM_dims, EAM_dims, dropout_rate).to(device)  # Generator
 disc_net = DiscNet(FEM_dims, disc_dims, dropout_rate).to(device)  # Discriminator  模型要放在GPU上
 # ==========
 # Define the optimizer 定义三个优化器，分别用于G的预训练，G的训练，D的训练

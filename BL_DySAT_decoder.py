@@ -21,7 +21,7 @@ class FCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(FCNN, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, num_nodes)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
 
         # # Xavier初始化
         # init.xavier_uniform_(self.fc1.weight)

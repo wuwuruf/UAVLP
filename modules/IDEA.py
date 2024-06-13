@@ -77,7 +77,7 @@ class GenNet_tanh(nn.Module):
         for l in range(self.num_FEM_layers):  # 对每一层，将输入序列均输入该层，得到输出序列，再将输出序列输入下一层
             FEM_layer = self.FEM_layers[l]
             FEM_output_list = []
-            for t in range(win_size + 1):
+            for t in range(win_size + 1):  # 这里特征列表包含了待预测时刻的特征
                 FEM_input = FEM_input_list[t]
                 FEM_output = FEM_layer(FEM_input)
                 FEM_output = torch.relu(FEM_output)
@@ -117,7 +117,7 @@ class GenNet_tanh(nn.Module):
                                        lambd=lambd)  # 对齐
                 align_output_list.append(pre_state)
                 RNN_output_list.append(RNN_output)
-            RNN_output_list.append(pre_state)  # 为什么最后一次RNN的输出还要加上最后的对齐的隐藏状态？？？好像没啥用？删了看看？？
+            # RNN_output_list.append(pre_state)  # 为什么最后一次RNN的输出还要加上最后的对齐的隐藏状态？？？好像没啥用？删了看看？？ 确实没用
             # ==========
             EDM_input_list = RNN_output_list  # 隐藏状态从上一个GR单元输入下一个GR单元时，并不需要对齐（因为是同一时间步）
         EDM_output_list = align_output_list
