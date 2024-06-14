@@ -10,14 +10,11 @@
 #
 import torch
 
-a = torch.tensor([1, 2, 3, 4]).view(-1, 1)
-wx = torch.tensor([[1, 2, 3, 4],
-                   [5, 6, 7, 8],
-                   [9, 8, 7, 6]])
-print(wx.shape)
-print(a.shape)
-r = torch.matmul(wx, a)
-print(r.shape)
+import torch
+
+list = [[[],[]]]* 8
+
+print(list)
 
 # import numpy as np
 #

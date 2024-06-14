@@ -27,9 +27,7 @@ class WeightedGAT(Module):
                  input_dim,
                  output_dim,
                  n_heads,
-                 drop_rate
-                 # residual):
-                 ):
+                 drop_rate):
         super(WeightedGAT, self).__init__()
         # 每个头的特征维度
         self.out_dim = output_dim // n_heads
@@ -205,11 +203,11 @@ class HierarchicalPool(torch.nn.Module):
         self.pooling_ratio = pooling_ratio
         self.dropout_ratio = dropout_ratio
 
-        self.conv1 = WeightedGAT(self.feat_dim, self.hidden_dim, n_heads, dropout_ratio)
+        self.conv1 = WeightedGAT(self.feat_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
         self.pool1 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
-        self.conv2 = WeightedGAT(self.hidden_dim, self.hidden_dim, n_heads, dropout_ratio)
+        self.conv2 = WeightedGAT(self.hidden_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
         self.pool2 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
-        self.conv3 = WeightedGAT(self.hidden_dim, self.hidden_dim, n_heads, dropout_ratio)
+        self.conv3 = WeightedGAT(self.hidden_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
         self.pool3 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
 
     def forward(self, edge_index, edge_weight, feat):

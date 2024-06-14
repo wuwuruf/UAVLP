@@ -43,7 +43,7 @@ FEM_dims = [GNN_feat_dim, 32, 32]  # Layer configuration of feature extraction m
 EDM_dims = [(FEM_dims[-1] + noise_dim), 128, 64]  # Layer configuration of embedding derivation module (EDM)
 EAM_dims = [(EDM_dims[-1] + FEM_dims[-1]), 64, 64]  # Layer configuration of embedding aggregation module (EAM)
 disc_dims = [FEM_dims[-1], 32, 16, 8]  # Layer configuration of discriminator
-save_flag = True  # Flag whether to save the trained model (w.r.t. each epoch)
+save_flag = False  # Flag whether to save the trained model (w.r.t. each epoch)
 
 # ====================
 alpha = 20  # Parameter to balance the ER loss

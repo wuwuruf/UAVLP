@@ -28,7 +28,7 @@ class MultiAggLP(Module):
     5. 使用GRU最后的隐藏状态预测邻接矩阵（值在0到1之间）
     """
 
-    def __init__(self, micro_dims, input_feat_dim, pool_hidden_dim, pooling_ratio, agg_feat_dim, RNN_dims, decoder_dims,
+    def __init__(self, micro_dims, pooling_ratio, agg_feat_dim, RNN_dims, decoder_dims,
                  n_heads,
                  dropout_rate):
         super(MultiAggLP, self).__init__()
@@ -36,10 +36,9 @@ class MultiAggLP(Module):
         self.micro_dims = micro_dims  # 学习微观表示的GAT层的维度
         # self.meso_dims = meso_dims  # 介观池化层的维度
         # self.macro_dims = macro_dims  # 宏观池化层的维度
-        self.input_feat_dim = input_feat_dim  # 输入特征的维度
-        self.pooling_hidden_dim = pool_hidden_dim  # 池化层的隐藏层维度，池化层的输出特征维度等于pool_hidden_dim*2
+        self.pooling_hidden_dim = micro_dims[-1] // 2  # 池化层的隐藏层维度，池化层的输出特征维度等于pool_hidden_dim*2
         self.pooling_ratio = pooling_ratio  # 池化率
-        self.agg_feat_dim = agg_feat_dim  # 输出的特征维度
+        self.agg_feat_dim = agg_feat_dim  # 聚合得到的特征维度
         self.RNN_dims = RNN_dims  # GRU的维度
         self.decoder_dims = decoder_dims  # 解码器的维度
         self.n_heads = n_heads
@@ -50,16 +49,16 @@ class MultiAggLP(Module):
         self.micro_GAT_layers = nn.ModuleList()
         for l in range(self.num_micro_GAT_layers):
             self.micro_GAT_layers.append(
-                WeightedGAT(input_dim=micro_dims[l], output_dim=micro_dims[l + 1], n_heads=self.n_heads,
+                WeightedGAT(input_dim=self.micro_dims[l], output_dim=self.micro_dims[l + 1], n_heads=self.n_heads,
                             drop_rate=self.dropout_rate))
         # ==================
         # 学习宏观池化表示
-        self.macro_pooling_layers = HierarchicalPool(self.input_feat_dim, self.pooling_hidden_dim, self.pooling_ratio,
+        self.macro_pooling_layers = HierarchicalPool(self.micro_dims[-1], self.pooling_hidden_dim, self.pooling_ratio,
                                                      self.n_heads,
                                                      dropout_ratio=self.dropout_rate)
         # ==================
         # 学习介观池化表示
-        self.meso_pooling_layers = HierarchicalPool(self.input_feat_dim, self.pooling_hidden_dim, self.pooling_ratio,
+        self.meso_pooling_layers = HierarchicalPool(self.micro_dims[-1], self.pooling_hidden_dim, self.pooling_ratio,
                                                     self.n_heads,
                                                     dropout_ratio=self.dropout_rate)
         # ==================
@@ -76,14 +75,20 @@ class MultiAggLP(Module):
         # 解码器
         self.decoder = FCNN(self.decoder_dims[0], self.decoder_dims[1], self.decoder_dims[2])
 
-    def forward(self, edge_index_list, edge_weight_list, feat_list, pred_flag=True):
+    def forward(self, edge_index_list, edge_weight_list, feat_list, edge_index_com_list_list,
+                edge_weight_com_list_list, partition_dict_list, pred_flag=True):
         """
         :param edge_weight_list:
         :param edge_index_list:
         :param feat_list:就是 torch.FloatTensor
+        :param edge_weight_com_list_list:
+        :param edge_index_com_list_list: 前一个list表示每个图按社团分为了多个edge_index，称为edge_weight_com，后一个表示是多个图
+        :param partition_dict_list: 社团划分结果，key为节点编号，value为社团编号
+        :param pred_flag:
         :return:
         """
         win_size = len(feat_list)
+        num_nodes = feat_list[0].shape[0]
         # =======================
         # 学习微观表示矩阵的列表
         input_micro_feat_list = feat_list
@@ -98,6 +103,21 @@ class MultiAggLP(Module):
         # =======================
         # 介观池化获取介观表示矩阵的列表
         output_meso_feat_list = []
+        for t in range(win_size):
+            edge_index_com_list = edge_index_com_list_list[t]
+            edge_weight_com_list = edge_weight_com_list_list[t]
+            partition_dict = partition_dict_list[t]
+            output_micro_feat = output_micro_feat_list[t]
+            output_meso_feat = torch.empty(num_nodes, self.micro_dims[-1])  # 介观特征矩阵
+            for com_idx in range(len(edge_index_com_list)):
+                edge_index_com = edge_index_com_list[com_idx]
+                edge_weight_com = edge_weight_com_list[com_idx]
+                cur_com_nodes_list = [key for key, value in partition_dict.items() if
+                                      value == com_idx]  # 找出属于当前社团的节点编号列表
+                output_meso_com_feat = self.meso_pooling_layers(edge_index_com, edge_weight_com,
+                                                                output_micro_feat[cur_com_nodes_list])  # 该社团内进行池化得到的特征
+                output_meso_feat[cur_com_nodes_list] = output_meso_com_feat  # 将介观特征矩阵的对应当前社团的行直接赋值为当前社团池化特征
+            output_meso_feat_list.append(output_meso_feat)
         # =======================
         # 宏观池化获取宏观表示矩阵的列表
         output_macro_feat_list = []
