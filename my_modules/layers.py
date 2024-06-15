@@ -21,6 +21,8 @@ from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 
 import copy
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 class WeightedGAT(Module):
     def __init__(self,
@@ -57,7 +59,7 @@ class WeightedGAT(Module):
         # # 深拷贝，防止在后续操作中修改原始数据
         # graph = copy.deepcopy(graph)
         # edge_index = graph.edge_index
-        # edge_weight = graph.edge_weight.reshape(-1, 1)
+        edge_weight = edge_weight.reshape(-1, 1)
         H, C = self.n_heads, self.out_dim  # 16, 8
         # W*X，对特征做线性变换：e.g.第一张图[18, 143]*[143, 128]=>[18, 128]=>[18,16,8]
         x = self.lin(feat).view(-1, H, C)  # [N, heads, out_dim]
@@ -170,10 +172,10 @@ class SAGPool(torch.nn.Module):
         self.non_linearity = non_linearity
 
     def forward(self, x, edge_index, edge_attr=None):
-        batch = edge_index.new_zeros(x.size(0))
-        score = self.score_layer(x, edge_index).squeeze()
+        batch = edge_index.new_zeros(x.size(0))  # 维度为[节点数]的全0的tensor
+        score = self.score_layer(x, edge_index).squeeze()  # 维度为[节点数]，代表分数
 
-        perm = topk(score, self.ratio, batch)
+        perm = topk(score, self.ratio, batch)  # 根据得分选出最高的k个节点下标，返回维度为[节点数*ratio]的tensor
         x = x[perm] * self.non_linearity(score[perm]).view(-1, 1)
         edge_index, _ = filter_adj(
             edge_index, edge_attr, perm, num_nodes=score.size(0))
@@ -212,15 +214,29 @@ class HierarchicalPool(torch.nn.Module):
 
     def forward(self, edge_index, edge_weight, feat):
         x = F.relu(self.conv1(edge_index, edge_weight, feat))
-        x, edge_index = self.pool1(x, edge_index, None)
+        x, edge_index_1 = self.pool1(x, edge_index, None)
+        # edge_weight_1 = [edge_weight[i] for i in range(len(edge_weight)) if
+        #                  (edge_index[0][i].item(), edge_index[1][i].item()) in zip(edge_index_1[0].tolist(),
+        #                                                                            edge_index_1[1].tolist())]
+        edge_weight_1 = []
+        for i in range(len(edge_weight)):
+            if (edge_index[0][i].item(), edge_index[1][i].item()) in zip(edge_index_1[0].tolist(),
+                                                                         edge_index_1[1].tolist()):
+                edge_weight_1.append(edge_weight[i])
+
+        edge_weight_1 = torch.FloatTensor(edge_weight_1).to(device)
         x1 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
-        x = F.relu(self.conv2(x, edge_index))
-        x, edge_index = self.pool2(x, edge_index, None)
+        x = F.relu(self.conv2(edge_index_1, edge_weight_1, x))
+        x, edge_index_2 = self.pool2(x, edge_index_1, None)
+        edge_weight_2 =[edge_weight_1[i] for i in range(len(edge_weight_1)) if
+        (edge_index_1[0][i], edge_index_1[1][i]) in zip(*edge_index_2)]
+        edge_weight_2 = torch.FloatTensor(edge_weight_2).to(device)
         x2 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
-        x = F.relu(self.conv3(x, edge_index))
-        x, edge_index = self.pool3(x, edge_index, None)
+        x = F.relu(self.conv3(edge_index_2, edge_weight_2, x))
+        x, edge_index_3 = self.pool3(x, edge_index_2, None)
+        # edge_weight_3...
         x3 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
         x = x1 + x2 + x3

@@ -12,9 +12,11 @@ import torch
 
 import torch
 
-list = [[[],[]]]* 8
-
-print(list)
+list1 = []
+for i in range(8):
+    list1.append([[], []])
+list1[6][1].append(2)
+print(list1)
 
 # import numpy as np
 #
