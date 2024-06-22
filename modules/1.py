@@ -9,63 +9,58 @@
 # print(current_time)
 #
 import torch
+# import torch.cuda
+#
+# print(torch.backends.cudnn.version())
+# print(torch.__version__)
+import numpy as np
 
-import torch
+# 读取npy文件
+data = np.load('../data/UAV_data/UAV_GM_360_r=400_edge_seq.npy', allow_pickle=True)
+# data = np.load('../emb_Node2Vec/emb_Node2Vec_UAV_RPGM_360_r=300_dim=64.npy', allow_pickle=True)
 
-list1 = []
-for i in range(8):
-    list1.append([[], []])
-list1[6][1].append(2)
-print(list1)
+# 显示npy文件中的内容
+print("Numpy数组的形状：", data.shape)
+print("Numpy数组的数据类型：", data.dtype)
 
-# import numpy as np
-#
-#
-# # 读取npy文件
-# data = np.load('../data/UAV_data/UAV_RPGM_360_r=500_edge_seq.npy', allow_pickle=True)
-# # data = np.load('../emb_DySAT/emb_DySAT_UAV_RPGM_360_r=300.npy', allow_pickle=True)
-#
-# # 显示npy文件中的内容
-# print("Numpy数组的形状：", data.shape)
-# print("Numpy数组的数据类型：", data.dtype)
-#
-# print(data[1])
-# print(data[2])
-# print(data[3])
-#
-# # 计算最大边权重
-# max_weight = 0
-# for i in range(len(data)):
-#     for j in range(len(data[i])):
-#         max_weight = max(data[i][j][1], max_weight)
-# print("最大边权重为：", max_weight)
-#
-# # 计算平均边密度
-# total_density = 0
-# for i in range(data.shape[0]):
-#     edge_list = data[i]
-#
-#     # 计算实际存在的边数
-#     actual_edges = len(edge_list)
-#
-#     # 计算节点数，假设节点编号从1开始
-#     nodes = set()
-#     for edge in edge_list:
-#         nodes.add(edge[0])
-#         nodes.add(edge[1])
-#     num_nodes = len(nodes)
-#     # print("图快照%d的节点数为%d" % (i, num_nodes))
-#
-#     # 计算完全图的边数
-#     complete_edges = num_nodes * (num_nodes - 1) / 2
-#
-#     # 计算图的边密度
-#     density = actual_edges / complete_edges
-#     total_density += density
-#
-# av_density = total_density / data.shape[0]
-# print("图的边密度为:", av_density)
-#
+print(data[1])
+# print(np.linalg.norm(data[1][:, 0], ord=2))
+print(data[2])
+print(data[3])
+
+# 计算最大边权重
+max_weight = 0
+for i in range(len(data)):
+    for j in range(len(data[i])):
+        max_weight = max(data[i][j][1], max_weight)
+print("最大边权重为：", max_weight)
+
+# 计算平均边密度
+total_density = 0
+for i in range(data.shape[0]):
+    edge_list = data[i]
+
+    # 计算实际存在的边数
+    actual_edges = len(edge_list)
+
+    # 计算节点数，假设节点编号从1开始
+    nodes = set()
+    for edge in edge_list:
+        nodes.add(edge[0])
+        nodes.add(edge[1])
+    num_nodes = len(nodes)
+    # print("图快照%d的节点数为%d" % (i, num_nodes))
+
+    # 计算完全图的边数
+    complete_edges = num_nodes * (num_nodes - 1) / 2
+
+    # 计算图的边密度
+    density = actual_edges / complete_edges
+    total_density += density
+
+av_density = total_density / data.shape[0]
+print("图的边密度为:", av_density)
+
 # emb_list = np.load('../emb_Node2Vec/emb_Node2Vec_UAV_GM_r=400.npy')
 # F2 = np.linalg.norm(emb_list[0][0])
 # print(emb_list[0][0], F2)

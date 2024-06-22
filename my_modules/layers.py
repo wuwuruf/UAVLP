@@ -159,6 +159,77 @@ class IGRU(Module):
         return next_state
 
 
+class ILSTM(Module):
+    '''
+    Class to define inductive LSTM
+    '''
+
+    def __init__(self, input_dim, output_dim, dropout_rate):
+        super(ILSTM, self).__init__()
+        # ====================
+        self.input_dim = input_dim  # Dimensionality of input features
+        self.output_dim = output_dim  # Dimension of output features
+        self.dropout_rate = dropout_rate  # Dropout rate
+        # ====================
+        # Initialize model parameters
+        self.input_wei = Init.xavier_uniform_(
+            Parameter(torch.FloatTensor(self.input_dim + self.output_dim, self.output_dim)))
+        self.input_bias = Parameter(torch.zeros(self.output_dim))
+        self.forget_wei = Init.xavier_uniform_(
+            Parameter(torch.FloatTensor(self.input_dim + self.output_dim, self.output_dim)))
+        self.forget_bias = Parameter(torch.zeros(self.output_dim))
+        self.cell_wei = Init.xavier_uniform_(
+            Parameter(torch.FloatTensor(self.input_dim + self.output_dim, self.output_dim)))
+        self.cell_bias = Parameter(torch.zeros(self.output_dim))
+        self.output_wei = Init.xavier_uniform_(
+            Parameter(torch.FloatTensor(self.input_dim + self.output_dim, self.output_dim)))
+        self.output_bias = Parameter(torch.zeros(self.output_dim))
+        # ==========
+        self.param = nn.ParameterList()
+        self.param.append(self.input_wei)
+        self.param.append(self.input_bias)
+        self.param.append(self.forget_wei)
+        self.param.append(self.forget_bias)
+        self.param.append(self.cell_wei)
+        self.param.append(self.cell_bias)
+        self.param.append(self.output_wei)
+        self.param.append(self.output_bias)
+        # ==========
+        self.dropout_layer = nn.Dropout(p=self.dropout_rate)
+
+    def forward(self, pre_state, pre_cell, cur_input):
+        '''
+        Rewrite the forward function
+        :param pre_state: previous hidden state
+        :param pre_cell: previous cell state
+        :param cur_input: current input
+        :return: next hidden state, next cell state
+        '''
+        # ====================
+        combined = torch.cat((cur_input, pre_state), dim=1)
+
+        # Input gate
+        input_gate = torch.sigmoid(torch.mm(combined, self.param[0]) + self.param[1])
+
+        # Forget gate
+        forget_gate = torch.sigmoid(torch.mm(combined, self.param[2]) + self.param[3])
+
+        # Cell candidate
+        cell_candidate = torch.tanh(torch.mm(combined, self.param[4]) + self.param[5])
+
+        # Output gate
+        output_gate = torch.sigmoid(torch.mm(combined, self.param[6]) + self.param[7])
+
+        # Next cell state
+        next_cell = torch.mul(forget_gate, pre_cell) + torch.mul(input_gate, cell_candidate)
+
+        # Next hidden state
+        next_state = torch.mul(output_gate, torch.tanh(next_cell))
+        next_state = self.dropout_layer(next_state)
+
+        return next_state, next_cell
+
+
 class SAGPool(torch.nn.Module):
     """
     选择节点，切割edge_index
@@ -173,8 +244,9 @@ class SAGPool(torch.nn.Module):
 
     def forward(self, x, edge_index, edge_attr=None):
         batch = edge_index.new_zeros(x.size(0))  # 维度为[节点数]的全0的tensor
-        score = self.score_layer(x, edge_index).squeeze()  # 维度为[节点数]，代表分数
-
+        score = self.score_layer(x, edge_index).squeeze(dim=1)  # 维度为[节点数]，代表分数
+        # if score.shape != torch.Size([1]):
+        #     score = score.squeeze()
         perm = topk(score, self.ratio, batch)  # 根据得分选出最高的k个节点下标，返回维度为[节点数*ratio]的tensor
         x = x[perm] * self.non_linearity(score[perm]).view(-1, 1)
         edge_index, _ = filter_adj(
@@ -203,43 +275,51 @@ class HierarchicalPool(torch.nn.Module):
         # self.emb_dim = emb_dim
 
         self.pooling_ratio = pooling_ratio
-        self.dropout_ratio = dropout_ratio
 
-        self.conv1 = WeightedGAT(self.feat_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
+        # self.conv1 = WeightedGAT(self.feat_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
+        # self.pool1 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+        # self.conv2 = WeightedGAT(self.hidden_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
+        # self.pool2 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+        # self.conv3 = WeightedGAT(self.hidden_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
+        # self.pool3 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+
+        self.conv1 = GCNConv(self.feat_dim, self.hidden_dim)
         self.pool1 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
-        self.conv2 = WeightedGAT(self.hidden_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
+        # ==========================简化
+        self.conv2 = GCNConv(self.hidden_dim, self.hidden_dim)
         self.pool2 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
-        self.conv3 = WeightedGAT(self.hidden_dim, self.hidden_dim, self.n_heads, self.dropout_ratio)
+        self.conv3 = GCNConv(self.hidden_dim, self.hidden_dim)
         self.pool3 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
 
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+
     def forward(self, edge_index, edge_weight, feat):
-        x = F.relu(self.conv1(edge_index, edge_weight, feat))
-        x, edge_index_1 = self.pool1(x, edge_index, None)
+        x = F.relu(self.conv1(feat, edge_index))
+        x, edge_index = self.pool1(x, edge_index, None)  # 这里输出的edge_index与原来的edge_index边顺序是不同的
         # edge_weight_1 = [edge_weight[i] for i in range(len(edge_weight)) if
         #                  (edge_index[0][i].item(), edge_index[1][i].item()) in zip(edge_index_1[0].tolist(),
         #                                                                            edge_index_1[1].tolist())]
-        edge_weight_1 = []
-        for i in range(len(edge_weight)):
-            if (edge_index[0][i].item(), edge_index[1][i].item()) in zip(edge_index_1[0].tolist(),
-                                                                         edge_index_1[1].tolist()):
-                edge_weight_1.append(edge_weight[i])
-
-        edge_weight_1 = torch.FloatTensor(edge_weight_1).to(device)
+        # edge_weight_1 = torch.FloatTensor(edge_weight_1).to(device)
         x1 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
-        x = F.relu(self.conv2(edge_index_1, edge_weight_1, x))
-        x, edge_index_2 = self.pool2(x, edge_index_1, None)
-        edge_weight_2 =[edge_weight_1[i] for i in range(len(edge_weight_1)) if
-        (edge_index_1[0][i], edge_index_1[1][i]) in zip(*edge_index_2)]
-        edge_weight_2 = torch.FloatTensor(edge_weight_2).to(device)
+        # ========================简化
+        x = F.relu(self.conv2(x, edge_index))
+        x, edge_index = self.pool2(x, edge_index, None)
+        # edge_weight_2 = [edge_weight_1[i] for i in range(len(edge_weight_1)) if
+        #                  (edge_index_1[0][i], edge_index_1[1][i]) in zip(*edge_index_2)]
+        # edge_weight_2 = torch.FloatTensor(edge_weight_2).to(device)
         x2 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
-        x = F.relu(self.conv3(edge_index_2, edge_weight_2, x))
-        x, edge_index_3 = self.pool3(x, edge_index_2, None)
+        x = F.relu(self.conv3(x, edge_index))
+        x, edge_index = self.pool3(x, edge_index, None)
         # edge_weight_3...
         x3 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
         x = x1 + x2 + x3
+
+        x = self.dropout_layer(x)
+
+        # return x1
 
         return x
 
@@ -250,7 +330,7 @@ class AttMultiAgg(Module):
     （没用dropout，先看效果）
     """
 
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, dropout_ratio):
         """
         :param input_dim: 等于层次池化层的hidden_dim*2
         :param output_dim:
@@ -259,8 +339,11 @@ class AttMultiAgg(Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.lin = nn.Linear(self.input_dim, self.output_dim, bias=False)  # W 用于对特征线性变换
-        self.att_a = nn.Parameter(torch.Tensor(1, self.output_dim * 2))  # a^T 是列向量
+        self.att_a_T = nn.Parameter(torch.Tensor(self.output_dim * 2, 1))  # a^T 是列向量
         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+        self.elu = nn.ELU()
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+        self.xavier_init()  # nn.Parameter需要初始化
 
     def forward(self, micro_x, meso_x, macro_x):
         micro_x = self.lin(micro_x)
@@ -271,20 +354,25 @@ class AttMultiAgg(Module):
         micro_meso_x = torch.cat([micro_x, meso_x], dim=1)
         micro_macro_x = torch.cat([micro_x, macro_x], dim=1)
         # =====================
-        micro_micro_score = self.leaky_relu(torch.matmul(micro_micro_x, self.att_a))  # [节点数, 1]
-        micro_meso_score = self.leaky_relu(torch.matmul(micro_meso_x, self.att_a))
-        micro_macro_score = self.leaky_relu(torch.matmul(micro_macro_x, self.att_a))
+        micro_micro_score = self.leaky_relu(torch.matmul(micro_micro_x, self.att_a_T))  # [节点数, 1]
+        micro_meso_score = self.leaky_relu(torch.matmul(micro_meso_x, self.att_a_T))
+        micro_macro_score = self.leaky_relu(torch.matmul(micro_macro_x, self.att_a_T))
         # =====================
         att_weight = F.softmax(torch.cat([micro_micro_score, micro_meso_score, micro_macro_score], dim=1),
-                               dim=0)  # 沿着行做softmax
+                               dim=1)  # 对每一行做softmax
         # =====================
-        micro_x = att_weight[:, 0] * micro_x
-        meso_x = att_weight[:, 1] * meso_x
-        macro_x = att_weight[:, 2] * macro_x
+        micro_x = att_weight[:, 0].unsqueeze(1) * micro_x
+        meso_x = att_weight[:, 1].unsqueeze(1) * meso_x
+        macro_x = att_weight[:, 2].unsqueeze(1) * macro_x
         # =====================
         x = micro_x + meso_x + macro_x
+        x = self.elu(x)
+        x = self.dropout_layer(x)
 
         return x
+
+    def xavier_init(self):
+        nn.init.xavier_uniform_(self.att_a_T)
 
 
 class FCNN(nn.Module):
@@ -292,9 +380,10 @@ class FCNN(nn.Module):
     解码器
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout_ratio):
         super(FCNN, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout_ratio)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
 
         # # Xavier初始化
@@ -311,5 +400,6 @@ class FCNN(nn.Module):
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
         x = torch.sigmoid(self.fc2(x))
         return x

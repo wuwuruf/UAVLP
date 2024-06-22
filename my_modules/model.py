@@ -63,9 +63,10 @@ class MultiAggLP(Module):
                                                     dropout_ratio=self.dropout_rate)
         # ==================
         # 获取注意力融合表示
-        self.agg_layers = AttMultiAgg(self.pooling_hidden_dim * 2, self.agg_feat_dim)
+        self.agg_layers = AttMultiAgg(self.pooling_hidden_dim * 2, self.agg_feat_dim, self.dropout_rate)
         # ==================
         # 学习时序信息  先用两层GRU试试！！！
+
         self.num_RNN_layers = len(self.RNN_dims) - 1
         self.RNN_layers = nn.ModuleList()
         for l in range(self.num_RNN_layers):
@@ -73,7 +74,7 @@ class MultiAggLP(Module):
                 IGRU(input_dim=self.RNN_dims[l], output_dim=self.RNN_dims[l + 1], dropout_rate=self.dropout_rate))
         # ==================
         # 解码器
-        self.decoder = FCNN(self.decoder_dims[0], self.decoder_dims[1], self.decoder_dims[2])
+        self.decoder = FCNN(self.decoder_dims[0], self.decoder_dims[1], self.decoder_dims[2], self.dropout_rate)
 
     def forward(self, edge_index_list, edge_weight_list, feat_list, edge_index_com_list_list,
                 edge_weight_com_list_list, partition_dict_list, pred_flag=True):
@@ -108,7 +109,7 @@ class MultiAggLP(Module):
             edge_weight_com_list = edge_weight_com_list_list[t]
             partition_dict = partition_dict_list[t]
             output_micro_feat = output_micro_feat_list[t]
-            output_meso_feat = torch.empty(num_nodes, self.micro_dims[-1])  # 介观特征矩阵
+            output_meso_feat = torch.empty(num_nodes, self.micro_dims[-1]).to(device)  # 介观特征矩阵
             for com_idx in range(len(edge_index_com_list)):
                 edge_index_com = edge_index_com_list[com_idx]
                 edge_weight_com = edge_weight_com_list[com_idx]
@@ -124,7 +125,7 @@ class MultiAggLP(Module):
         for t in range(win_size):
             output_macro_feat = self.macro_pooling_layers(edge_index_list[t], edge_weight_list[t],
                                                           output_micro_feat_list[t])
-            output_macro_feat = output_macro_feat.expand(feat_list[t].shape[0], -1)  # 扩充列数使其形状与微观表示矩阵相同
+            output_macro_feat = output_macro_feat.expand(num_nodes, -1)  # 扩充列数使其形状与微观表示矩阵相同
             output_macro_feat_list.append(output_macro_feat)
         # =======================
         # 对多尺度表示进行融合，获取多尺度表示矩阵的列表
@@ -136,11 +137,12 @@ class MultiAggLP(Module):
         # ======================
         # 学习多尺度表示中的时序特征
         input_RNN_list = output_agg_feat_list
+        # input_RNN_list = output_micro_feat_list
         output_RNN_list = None
         for l in range(self.num_RNN_layers):
             RNN_layer = self.RNN_layers[l]
             output_RNN_list = []
-            pre_state = torch.zeros(feat_list.shape[0], self.RNN_dims[l]).to(device)
+            pre_state = torch.zeros(num_nodes, self.RNN_dims[l]).to(device)
             for t in range(win_size):
                 output_state = RNN_layer(pre_state, input_RNN_list[t])
                 pre_state = output_state
@@ -149,13 +151,16 @@ class MultiAggLP(Module):
         # ======================
         # 解码器
         if pred_flag:  # 预测模式，仅预测窗口外下一时刻的快照
-            input_feat = F.normalize(output_RNN_list[-1], dim=0, p=2)  # 对嵌入矩阵行向量进行标准化
+            input_feat = F.normalize(output_RNN_list[-1], dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
+            # input_feat = output_RNN_list[-1]
             pred_adj = self.decoder(input_feat)
             return [pred_adj]
         else:
             pred_adj_list = []
             for t in range(win_size):
-                input_feat = F.normalize(output_RNN_list[t], dim=0, p=2)  # 对嵌入矩阵行向量进行标准化
+                input_feat = F.normalize(output_RNN_list[t], dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
+                # input_feat = output_RNN_list[t]
                 pred_adj = self.decoder(input_feat)
                 pred_adj_list.append(pred_adj)
             return pred_adj_list
+        # ============

@@ -9,8 +9,8 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 import torch.optim as optim
-from modules.loss import get_decoder_loss
-from utils import *
+from my_modules.loss import *
+from my_modules.utils import *
 import random
 import datetime
 
@@ -18,9 +18,14 @@ device = torch.device('cuda')
 
 
 class FCNN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    """
+    解码器
+    """
+
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout_ratio):
         super(FCNN, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout_ratio)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
 
         # # Xavier初始化
@@ -37,6 +42,7 @@ class FCNN(nn.Module):
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
         x = torch.sigmoid(self.fc2(x))
         return x
 
@@ -50,30 +56,34 @@ def setup_seed(seed):
 
 
 setup_seed(0)
-data_name = 'UAV_RPGM_360_r=400'
+data_name = 'UAV_RPGM_360_r=300'
 num_nodes = 100
-num_snaps = 361
+num_snaps = 180
 max_thres = 100  # Threshold for maximum edge weight
 num_val_snaps = 10
-num_test_snaps = 50  # Number of test snapshots
+num_test_snaps = 20  # Number of test snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps
-num_epochs = 50
-emb_dim = 64
-decoder_hidden_dim = 128
+num_epochs = 500
+emb_dim = 128
+decoder_hidden_dim = 256
+dropout_ratio = 0.5
 win_size = 10
+save_flag = True
 
 # =================================================
 alpha = 20  # Parameter to balance the ER loss
 beta = 0.1  # Parameter to balance the SDM loss
-
+sparse_beta = 2
 # =================================================
 epsilon = 0.01  # Threshold of the zero-refining
 
 edge_seq = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
-emb_list = np.load('emb_DySAT/emb_DySAT_%s.npy' % data_name)
-
+edge_seq = edge_seq[:180]
+data_name = 'UAV_RPGM_180_r=300'
+emb_list = np.load('emb_DySAT/emb_DySAT_%s_dim=%d.npy' % (data_name, emb_dim))
+#
 # ===============================================
-decoder = FCNN(emb_dim, decoder_hidden_dim, num_nodes).to(device)
+decoder = FCNN(emb_dim, decoder_hidden_dim, num_nodes, dropout_ratio).to(device)
 decoder_opt = optim.Adam(decoder.parameters(), lr=5e-4, weight_decay=1e-5)
 # ===============================================
 # 使用训练集训练用于预测的解码器（两层MLP）
@@ -87,11 +97,19 @@ for epoch in range(num_epochs):
         emb_tnr = torch.FloatTensor(emb_list[i]).to(device)  # 获取当前窗口内最后一个时刻的嵌入
         emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵行向量进行标准化
         adj_est = decoder(emb_tnr)
-        gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)  # 注意是预测窗口外第一个时刻，要i+1
-        gnd_norm = gnd / max_thres
-        gnd_tnr = torch.FloatTensor(gnd_norm).to(device)
-        # 计算损失用的是[0, 1]之间的矩阵，计算指标用的是真实值矩阵
-        decoder_loss = get_decoder_loss(adj_est, gnd_tnr, max_thres, alpha, beta)
+        # ===========================
+        # 加权预测
+        # gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)  # 注意是预测窗口外第一个时刻，要i+1
+        # gnd_norm = gnd / max_thres
+        # gnd_tnr = torch.FloatTensor(gnd_norm).to(device)
+        # # 计算损失用的是[0, 1]之间的矩阵，计算指标用的是真实值矩阵
+        # decoder_loss = get_single_loss(adj_est, gnd_tnr, max_thres, alpha, beta)
+        # ==========================
+        # 不加权预测
+        gnd = get_adj_no_wei(edge_seq[i + win_size], num_nodes)
+        gnd_tnr = torch.FloatTensor(gnd).to(device)
+        decoder_loss = get_single_corss_reg_loss(sparse_beta, gnd_tnr, adj_est)
+        # ==========================
         decoder_opt.zero_grad()
         decoder_loss.backward()
         decoder_opt.step()
@@ -99,14 +117,19 @@ for epoch in range(num_epochs):
     # print("train_num:%d" % count)
     decoder_loss_mean = np.mean(decoder_loss_list)
     print("Epoch-%d decoder_loss:" % epoch, decoder_loss_mean)
-
+    if save_flag:
+        torch.save(decoder, 'my_pt/DySAT_binary_%d.pkl' % epoch)
     # ===================================================
     # 使用验证集进行验证
     decoder.eval()
-    RMSE_list = []
-    MAE_list = []
-    MLSD_list = []
-    MR_list = []
+    # RMSE_list = []
+    # MAE_list = []
+    # MLSD_list = []
+    # MR_list = []
+    AUC_list = []
+    f1_score_list = []
+    precision_list = []
+    recall_list = []
     # count = 0
     for i in range(num_snaps - num_test_snaps - num_val_snaps - win_size, num_snaps - num_test_snaps - win_size):
         # count = count + 1
@@ -114,92 +137,173 @@ for epoch in range(num_epochs):
         emb_tnr = torch.FloatTensor(emb_list[i]).to(device)
         adj_est = decoder(emb_tnr)
         adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
-        adj_est *= max_thres
-        for r in range(num_nodes):
-            adj_est[r, r] = 0
-        for r in range(num_nodes):
-            for c in range(num_nodes):
-                if adj_est[r, c] <= epsilon:
-                    adj_est[r, c] = 0
-
-        # Get the ground-truth
-        gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)
-
-        # Evaluate the prediction result
-        RMSE = get_RMSE(adj_est, gnd, num_nodes)
-        MAE = get_MAE(adj_est, gnd, num_nodes)
-        MLSD = get_MLSD(adj_est, gnd, num_nodes)
-        MR = get_MR(adj_est, gnd, num_nodes)
-
-        RMSE_list.append(RMSE)
-        MAE_list.append(MAE)
-        MLSD_list.append(MLSD)
-        MR_list.append(MR)
-    # print("val_num:%d" % count)
-    RMSE_mean = np.mean(RMSE_list)
-    RMSE_std = np.std(RMSE_list, ddof=1)
-    MAE_mean = np.mean(MAE_list)
-    MAE_std = np.std(MAE_list, ddof=1)
-    MLSD_mean = np.mean(MLSD_list)
-    MLSD_std = np.std(MLSD_list, ddof=1)
-    MR_mean = np.mean(MR_list)
-    MR_std = np.std(MR_list, ddof=1)
-    print('Val #%d RMSE %f %f MAE %f %f MLSD %f %f MR %f %f\n'
-          % (epoch, RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std))
-    f_input = open('res/%s_DySAT_rec.txt' % data_name, 'a+')
-    f_input.write('Val #%d RMSE %f %f MAE %f %f MLSD %f %f MR %f %f Time %s\n'
-                  % (epoch, RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std, current_time))
+        # ========================================
+        # 不加权二分类预测
+        # ==============
+        # 获取真实的不加权0-1邻接矩阵
+        gnd = get_adj_no_wei(edge_seq[i + win_size], num_nodes)
+        # ===============
+        # 计算评价指标
+        AUC = get_AUC(adj_est, gnd)
+        f1_score = get_f1_score(adj_est, gnd)
+        precision = get_precision_score(adj_est, gnd)
+        recall = get_recall_score(adj_est, gnd)
+        # ===============
+        AUC_list.append(AUC)
+        f1_score_list.append(f1_score)
+        precision_list.append(precision)
+        recall_list.append(recall)
+    # ==============
+    AUC_mean = np.mean(AUC_list)
+    AUC_std = np.std(AUC_list, ddof=1)
+    f1_score_mean = np.mean(f1_score_list)
+    f1_score_std = np.std(f1_score_list, ddof=1)
+    precision_mean = np.mean(precision_list)
+    precision_std = np.std(precision_list, ddof=1)
+    recall_mean = np.mean(recall_list)
+    recall_std = np.std(recall_list, ddof=1)
+    # ==============
+    print('Val #%d AUC %f %f f1_score %f %f precision %f %f recall %f %f'
+          % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
+             recall_std))
+    # ==========
+    f_input = open('res/%s_DySAT_binary_rec.txt' % data_name, 'a+')
+    f_input.write('Val #%d AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
+                  % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std,
+                     precision_mean, precision_std, recall_mean, recall_std, current_time))
     f_input.close()
-
-# ======================================================================
-# 使用解码器对测试集进行预测
-RMSE_list = []
-MAE_list = []
-MLSD_list = []
-MR_list = []
-current_time = datetime.datetime.now().time().strftime("%H:%M:%S")
-# count = 0
-for i in range(num_snaps - num_test_snaps - win_size, num_snaps - 1 - win_size):
-    # count = count + 1
-    # Get and refine the prediction result
-    emb_tnr = torch.FloatTensor(emb_list[i]).to(device)
-    emb_tnr = F.normalize(emb_tnr, dim=0, p=2)
-    adj_est = decoder(emb_tnr)
-    adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
-    adj_est *= max_thres
-    for r in range(num_nodes):
-        adj_est[r, r] = 0
-    for r in range(num_nodes):
-        for c in range(num_nodes):
-            if adj_est[r, c] <= epsilon:
-                adj_est[r, c] = 0
-
-    # Get the ground-truth
-    gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)
-
-    # Evaluate the prediction result
-    RMSE = get_RMSE(adj_est, gnd, num_nodes)
-    MAE = get_MAE(adj_est, gnd, num_nodes)
-    MLSD = get_MLSD(adj_est, gnd, num_nodes)
-    MR = get_MR(adj_est, gnd, num_nodes)
-
-    RMSE_list.append(RMSE)
-    MAE_list.append(MAE)
-    MLSD_list.append(MLSD)
-    MR_list.append(MR)
-# print("test_num:%d" % count)
-# ====================
-RMSE_mean = np.mean(RMSE_list)
-RMSE_std = np.std(RMSE_list, ddof=1)
-MAE_mean = np.mean(MAE_list)
-MAE_std = np.std(MAE_list, ddof=1)
-MLSD_mean = np.mean(MLSD_list)
-MLSD_std = np.std(MLSD_list, ddof=1)
-MR_mean = np.mean(MR_list)
-MR_std = np.std(MR_list, ddof=1)
-print('Test RMSE %f %f MAE %f %f MLSD %f %f MR %f %f\n'
-      % (RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std))
-f_input = open('res/%s_DySAT_rec.txt' % data_name, 'a+')
-f_input.write('Test RMSE %f %f MAE %f %f MLSD %f %f MR %f %f Time %s\n'
-              % (RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std, current_time))
-f_input.close()
+    #     # ======================================
+    #     # 加权预测
+    #     adj_est *= max_thres
+    #     for r in range(num_nodes):
+    #         adj_est[r, r] = 0
+    #     for r in range(num_nodes):
+    #         for c in range(num_nodes):
+    #             if adj_est[r, c] <= epsilon:
+    #                 adj_est[r, c] = 0
+    #
+    #     # Get the ground-truth
+    #     gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)
+    #
+    #     # Evaluate the prediction result
+    #     RMSE = get_RMSE(adj_est, gnd, num_nodes)
+    #     MAE = get_MAE(adj_est, gnd, num_nodes)
+    #     MLSD = get_MLSD(adj_est, gnd, num_nodes)
+    #     MR = get_MR(adj_est, gnd, num_nodes)
+    #
+    #     RMSE_list.append(RMSE)
+    #     MAE_list.append(MAE)
+    #     MLSD_list.append(MLSD)
+    #     MR_list.append(MR)
+    # # print("val_num:%d" % count)
+    # RMSE_mean = np.mean(RMSE_list)
+    # RMSE_std = np.std(RMSE_list, ddof=1)
+    # MAE_mean = np.mean(MAE_list)
+    # MAE_std = np.std(MAE_list, ddof=1)
+    # MLSD_mean = np.mean(MLSD_list)
+    # MLSD_std = np.std(MLSD_list, ddof=1)
+    # MR_mean = np.mean(MR_list)
+    # MR_std = np.std(MR_list, ddof=1)
+    # print('Val #%d RMSE %f %f MAE %f %f MLSD %f %f MR %f %f\n'
+    #       % (epoch, RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std))
+    # f_input = open('res/%s_DySAT_rec.txt' % data_name, 'a+')
+    # f_input.write('Val #%d RMSE %f %f MAE %f %f MLSD %f %f MR %f %f Time %s\n'
+    #               % (epoch, RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std, current_time))
+    # f_input.close()
+    if (epoch + 1) % 5 == 0:
+        # ======================================================================
+        # 使用解码器对测试集进行预测
+        # decoder = torch.load('my_pt/DySAT_binary_40.pkl')
+        decoder.eval()
+        # RMSE_list = []
+        # MAE_list = []
+        # MLSD_list = []
+        # MR_list = []
+        AUC_list = []
+        f1_score_list = []
+        precision_list = []
+        recall_list = []
+        current_time = datetime.datetime.now().time().strftime("%H:%M:%S")
+        # count = 0
+        for i in range(num_snaps - num_test_snaps - win_size, num_snaps - 1 - win_size):
+            # count = count + 1
+            # Get and refine the prediction result
+            emb_tnr = torch.FloatTensor(emb_list[i]).to(device)
+            emb_tnr = F.normalize(emb_tnr, dim=0, p=2)
+            adj_est = decoder(emb_tnr)
+            adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
+            # ========================================
+            # 不加权二分类预测
+            # ==============
+            # 获取真实的不加权0-1邻接矩阵
+            gnd = get_adj_no_wei(edge_seq[i + win_size], num_nodes)
+            # ===============
+            # 计算评价指标
+            AUC = get_AUC(adj_est, gnd)
+            f1_score = get_f1_score(adj_est, gnd)
+            precision = get_precision_score(adj_est, gnd)
+            recall = get_recall_score(adj_est, gnd)
+            # ===============
+            AUC_list.append(AUC)
+            f1_score_list.append(f1_score)
+            precision_list.append(precision)
+            recall_list.append(recall)
+        # ==============
+        AUC_mean = np.mean(AUC_list)
+        AUC_std = np.std(AUC_list, ddof=1)
+        f1_score_mean = np.mean(f1_score_list)
+        f1_score_std = np.std(f1_score_list, ddof=1)
+        precision_mean = np.mean(precision_list)
+        precision_std = np.std(precision_list, ddof=1)
+        recall_mean = np.mean(recall_list)
+        recall_std = np.std(recall_list, ddof=1)
+        # ==============
+        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f'
+              % (
+                  AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
+                  recall_std))
+        # ==========
+        f_input = open('res/%s_DySAT_binary_rec.txt' % data_name, 'a+')
+        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
+                      % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
+                         recall_std, current_time))
+        f_input.close()
+# # =========================================
+# # 加权预测
+#     adj_est *= max_thres
+#     for r in range(num_nodes):
+#         adj_est[r, r] = 0
+#     for r in range(num_nodes):
+#         for c in range(num_nodes):
+#             if adj_est[r, c] <= epsilon:
+#                 adj_est[r, c] = 0
+#
+#     # Get the ground-truth
+#     gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)
+#
+#     # Evaluate the prediction result
+#     RMSE = get_RMSE(adj_est, gnd, num_nodes)
+#     MAE = get_MAE(adj_est, gnd, num_nodes)
+#     MLSD = get_MLSD(adj_est, gnd, num_nodes)
+#     MR = get_MR(adj_est, gnd, num_nodes)
+#
+#     RMSE_list.append(RMSE)
+#     MAE_list.append(MAE)
+#     MLSD_list.append(MLSD)
+#     MR_list.append(MR)
+# # print("test_num:%d" % count)
+# # ====================
+# RMSE_mean = np.mean(RMSE_list)
+# RMSE_std = np.std(RMSE_list, ddof=1)
+# MAE_mean = np.mean(MAE_list)
+# MAE_std = np.std(MAE_list, ddof=1)
+# MLSD_mean = np.mean(MLSD_list)
+# MLSD_std = np.std(MLSD_list, ddof=1)
+# MR_mean = np.mean(MR_list)
+# MR_std = np.std(MR_list, ddof=1)
+# print('Test RMSE %f %f MAE %f %f MLSD %f %f MR %f %f\n'
+#       % (RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std))
+# f_input = open('res/%s_DySAT_rec.txt' % data_name, 'a+')
+# f_input.write('Test RMSE %f %f MAE %f %f MLSD %f %f MR %f %f Time %s\n'
+#               % (RMSE_mean, RMSE_std, MAE_mean, MAE_std, MLSD_mean, MLSD_std, MR_mean, MR_std, current_time))
+# f_input.close()

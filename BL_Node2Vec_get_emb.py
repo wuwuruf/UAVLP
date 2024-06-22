@@ -29,11 +29,12 @@ def setup_seed(seed):
 setup_seed(0)
 data_name = 'UAV_RPGM_360_r=300'
 num_nodes = 100
-num_snaps = 361
+num_snaps = 180
 emb_dim = 64
 
 edge_seq = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
-
+edge_seq = edge_seq[0:180]
+data_name = 'UAV_RPGM_180_r=300'
 # ===========================================================
 # 学习除了最后一个快照的嵌入
 emb_list = []
@@ -79,4 +80,4 @@ for i in range(num_snaps - 1):
 
 # 保存嵌入
 # 含num_snaps - 1数量的快照嵌入，不包含最后一张快照的嵌入
-np.save('emb_Node2Vec/Node2Vec_emb_%s.npy' % data_name, np.array(emb_list))
+np.save('emb_Node2Vec/emb_Node2Vec_%s_dim=64.npy' % data_name, np.array(emb_list))

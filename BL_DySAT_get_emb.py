@@ -56,10 +56,10 @@ if __name__ == "__main__":
     setup_seed(0)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--time_steps', type=int, nargs='?', default=361,
+    parser.add_argument('--time_steps', type=int, nargs='?', default=180,
                         help="total time steps used for train, eval and test")
     # Experimental settings.
-    parser.add_argument('--dataset', type=str, nargs='?', default='UAV_RPGM_360_r=400',
+    parser.add_argument('--dataset', type=str, nargs='?', default='UAV_RPGM_360_r=300',
                         help='dataset name')
     parser.add_argument('--GPU_ID', type=int, nargs='?', default=0,
                         help='GPU_ID (0/1 etc.)')
@@ -100,11 +100,11 @@ if __name__ == "__main__":
     # Architecture params
     parser.add_argument('--structural_head_config', type=str, nargs='?', default='16,8,8',
                         help='Encoder layer config: # attention heads in each GAT layer')
-    parser.add_argument('--structural_layer_config', type=str, nargs='?', default='64',
+    parser.add_argument('--structural_layer_config', type=str, nargs='?', default='128',
                         help='Encoder layer config: # units in each GAT layer')
     parser.add_argument('--temporal_head_config', type=str, nargs='?', default='16',
                         help='Encoder layer config: # attention heads in each Temporal layer')
-    parser.add_argument('--temporal_layer_config', type=str, nargs='?', default='64',
+    parser.add_argument('--temporal_layer_config', type=str, nargs='?', default='128',
                         help='Encoder layer config: # units in each Temporal layer')
     parser.add_argument('--position_ffn', type=str, nargs='?', default='True',
                         help='Position wise feedforward')
@@ -113,12 +113,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
 
-    num_snaps = 361
-    win_size = 10
     # ============================================
     # 构建graphs, adjs, feats列表
     edge_seq_list = np.load('data/UAV_data/%s_edge_seq.npy' % args.dataset, allow_pickle=True)
     feat = np.load('data/UAV_data/%s_feat.npy' % args.dataset, allow_pickle=True)
+    edge_seq_list = edge_seq_list[:180]
+    feat = feat[:180]
+    data_name = 'UAV_RPGM_180_r=300'
     graphs = []
     adjs = []
     feats = []
@@ -190,4 +191,4 @@ if __name__ == "__main__":
             emb_list.append(emb)
 
     # 只包含了下标为[window - 1, time_steps - 2]的嵌入，用来预测下标为[window, time_steps - 1]的链路，嵌入矩阵数量为num_snaps - win_size
-    np.save('emb_DySAT/emb_DySAT_%s_1.npy' % args.dataset, np.array(emb_list))
+    np.save('emb_DySAT/emb_DySAT_%s_dim=128.npy' % data_name, np.array(emb_list))

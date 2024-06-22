@@ -5,6 +5,7 @@
 # @Project : IDEA
 
 import numpy as np
+from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 
 
 def get_adj_wei(edges, num_nodes, max_wei):
@@ -29,6 +30,81 @@ def get_adj_wei(edges, num_nodes, max_wei):
         adj[i, i] = 0
 
     return adj
+
+
+def get_adj_no_wei(edges, num_nodes):
+    '''
+    Function to get (dense) unweighted adjacency matrix according to edge list
+    :param edges: edge list
+    :param num_nodes: number of nodes
+    :return: adj: adjacency matrix
+    '''
+    adj = np.zeros((num_nodes, num_nodes))
+    num_edges = len(edges)
+    for i in range(num_edges):
+        src = int(edges[i][0])
+        dst = int(edges[i][1])
+        wei = float(edges[i][2])
+        if wei > 0:
+            wei = 1
+        else:
+            wei = 0
+        adj[src, dst] = wei
+        adj[dst, src] = wei
+    for i in range(num_nodes):
+        adj[i, i] = 0
+
+    return adj
+
+
+def get_AUC(pred_adj, gnd):
+    """
+    用于不加权预测
+    :param pred_adj:
+    :param gnd:
+    :return:
+    """
+    return roc_auc_score(np.reshape(gnd, (-1,)), np.reshape(pred_adj, (-1,)))
+
+
+def get_f1_score(pred_adj, gnd):
+    """
+    用于不加权预测
+    :param pred_adj:
+    :param gnd:
+    :return:
+    """
+    # 将概率转换为二分类标签
+    threshold = 0.5  # 设定阈值
+    pred_adj = (pred_adj > threshold).astype(float)
+    return f1_score(np.reshape(gnd, (-1,)), np.reshape(pred_adj, (-1,)), average='binary')
+
+
+def get_precision_score(pred_adj, gnd):
+    """
+    用于不加权预测
+    :param pred_adj:
+    :param gnd:
+    :return:
+    """
+    # 将概率转换为二分类标签
+    threshold = 0.5  # 设定阈值
+    pred_adj = (pred_adj > threshold).astype(float)
+    return precision_score(np.reshape(gnd, (-1,)), np.reshape(pred_adj, (-1,)))
+
+
+def get_recall_score(pred_adj, gnd):
+    """
+    用于不加权预测
+    :param pred_adj:
+    :param gnd:
+    :return:
+    """
+    # 将概率转换为二分类标签
+    threshold = 0.5  # 设定阈值
+    pred_adj = (pred_adj > threshold).astype(float)
+    return recall_score(np.reshape(gnd, (-1,)), np.reshape(pred_adj, (-1,)))
+
 
 def get_RMSE(adj_est, gnd, num_nodes):
     '''

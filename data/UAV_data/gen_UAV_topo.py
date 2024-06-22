@@ -11,14 +11,15 @@ from utils import *
 import matplotlib.pyplot as plt
 import math
 
+# 参数设置
+r = 300  # 通信半径
+
 # ========================================
 # ========== 构建edge_seq===============
 # 读取csv文件
-df = pd.read_csv('UAV_RPGM_data_360.csv')
+df = pd.read_csv('UAV_GM_data_360.csv')
 df_SNR = pd.read_csv('snr_data.csv')
 
-# 参数设置
-r = 300  # 通信半径
 edge_seq = []
 
 
@@ -53,7 +54,7 @@ for time_point in df['time'].unique():
 
     edge_seq.append(edge_list)
 
-np.save('UAV_RPGM_360_r=300_edge_seq.npy', np.array(edge_seq, dtype=object))
+np.save('UAV_GM_360_r=300_edge_seq.npy', np.array(edge_seq, dtype=object))
 # ====================================================
 
 
@@ -72,18 +73,18 @@ for i in range(100):
     feat[i] = np.array([int(bit) for bit in ip_bin])
 
 # 保存feat数组为npy文件
-np.save('UAV_RPGM_360_r=300_feat.npy', feat)
+np.save('UAV_GM_360_r=300_feat.npy', feat)
 # ====================================================
 
 
 # ================================================
 # ======构建模块化矩阵==========这段代码没问题
 # 从npy文件中读取edge_seq
-edge_seq = np.load('UAV_RPGM_360_r=300_edge_seq.npy', allow_pickle=True)
+edge_seq = np.load('UAV_GM_360_r=300_edge_seq.npy', allow_pickle=True)
 
 n = 100
 max_thres = 1
-num_snaps = 721
+num_snaps = 361
 
 # 初始化mod数组
 mod = np.zeros((num_snaps, n, n), dtype=np.float32)
@@ -106,14 +107,14 @@ for i, snapshot_edges in enumerate(edge_seq):
     mod[i] = Q
 
 # 将mod保存到npy文件中
-np.save('UAV_RPGM_360_r=300_mod.npy', mod)
+np.save('UAV_GM_360_r=300_mod.npy', mod)
 # # ====================================================
 
 
 # ========================================
 # ========查看边数量变化情况===============
 # 从npy文件中加载edge_seq
-edge_seq = np.load('UAV_RPGM_360_r=300_edge_seq.npy', allow_pickle=True)
+edge_seq = np.load('UAV_GM_360_r=300_edge_seq.npy', allow_pickle=True)
 
 # 计算每张图快照的边数量
 num_edges = [len(edges) for edges in edge_seq]
@@ -129,7 +130,7 @@ plt.ylabel('Number of Edges')
 
 # 显示网格线
 plt.grid(True)
-plt.savefig(f'edge_r=300_num_RPGM_360.png')
+plt.savefig(f'edge_num_GM_360_r=300.png')
 
 # 显示图形
 plt.show()
