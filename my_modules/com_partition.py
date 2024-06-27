@@ -10,7 +10,7 @@ from community import community_louvain
 import datetime
 
 
-data_name = 'UAV_RPGM_360_r=300'
+data_name = 'GM_2000'
 num_snaps = 180
 max_weight = 100
 # =================
@@ -27,17 +27,19 @@ for i in range(num_snaps):
     for edge in edge_seq_list[i]:  # 每条边代表的是无向边！！不存在重复
         edge_index[0].append(edge[0])
         edge_index[1].append(edge[1])
-        edge_weight.append(edge[2] / max_weight)  # 权重归一化
+        edge_weight.append(edge[2])  # 权重归一化
     # edge_index_tnr = torch.LongTensor(edge_index).to(device)
     # edge_weight_tnr = torch.FloatTensor(edge_weight).to(device)
     edge_index_list.append(edge_index)
     edge_weight_list.append(edge_weight)
 # ===================
+# feat = np.load('../data/UAV_data_interval=5/%s_feat.npy' % data_name, allow_pickle=True)
 feat = np.load('../data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
+
 feat_list = []
 for i in range(num_snaps):
     feat_list.append(feat)
-data_name = 'UAV_RPGM_180_r=300'
+data_name = 'GM_2000_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []
@@ -96,11 +98,7 @@ for t in range(num_snaps):
         edge_index_com_new = [[node_map[node] for node in edge_index_com_list[com_id][0]],
                               [node_map[node] for node in edge_index_com_list[com_id][1]]]
         edge_index_com_list_new.append(edge_index_com_new)
-    # ==========
-    # edge_index_com_tnr_list = [torch.LongTensor(edge_index_com).to(device) for edge_index_com in
-    #                            edge_index_com_list_new]
-    # edge_weight_com_tnr_list = [torch.FloatTensor(edge_weight_com).to(device) for edge_weight_com in
-    #                             edge_weight_com_list]
+
     edge_index_com_list_list.append(edge_index_com_list_new)
     edge_weight_com_list_list.append(edge_weight_com_list)
 

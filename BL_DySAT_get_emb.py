@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument('--time_steps', type=int, nargs='?', default=180,
                         help="total time steps used for train, eval and test")
     # Experimental settings.
-    parser.add_argument('--dataset', type=str, nargs='?', default='UAV_RPGM_360_r=300',
+    parser.add_argument('--dataset', type=str, nargs='?', default='GM_2000',
                         help='dataset name')
     parser.add_argument('--GPU_ID', type=int, nargs='?', default=0,
                         help='GPU_ID (0/1 etc.)')
@@ -117,9 +117,9 @@ if __name__ == "__main__":
     # 构建graphs, adjs, feats列表
     edge_seq_list = np.load('data/UAV_data/%s_edge_seq.npy' % args.dataset, allow_pickle=True)
     feat = np.load('data/UAV_data/%s_feat.npy' % args.dataset, allow_pickle=True)
-    edge_seq_list = edge_seq_list[:180]
-    feat = feat[:180]
-    data_name = 'UAV_RPGM_180_r=300'
+    # edge_seq_list = edge_seq_list[:180]
+    # feat = feat[:180]
+    data_name = 'GM_2000_180'
     graphs = []
     adjs = []
     feats = []

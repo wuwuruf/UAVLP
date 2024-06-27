@@ -324,6 +324,98 @@ class HierarchicalPool(torch.nn.Module):
         return x
 
 
+class SimplePool(torch.nn.Module):
+    """
+    输入为一张图快照，输出为其池化表示，输出为维度 hidden_dim*2 的向量，作为图的表示
+    """
+
+    def __init__(self, feat_dim, hidden_dim, pooling_ratio, n_heads, dropout_ratio):
+        """
+        :param feat_dim:
+        :param hidden_dim:
+        :param pooling_ratio:
+        :param n_heads: 表示其中使用的GAT的注意力头数
+        :param dropout_ratio:
+        """
+        super(SimplePool, self).__init__()
+        self.feat_dim = feat_dim
+        self.hidden_dim = hidden_dim
+        self.n_heads = n_heads
+        # self.emb_dim = emb_dim
+
+        self.pooling_ratio = pooling_ratio
+
+        self.conv1 = GCNConv(self.feat_dim, self.hidden_dim)
+        self.pool1 = SAGPool(self.hidden_dim, ratio=self.pooling_ratio)
+
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+
+    def forward(self, edge_index, edge_weight, feat):
+        x = F.relu(self.conv1(feat, edge_index))
+        x, edge_index = self.pool1(x, edge_index, None)  # 这里输出的edge_index与原来的edge_index边顺序是不同的
+
+        x1 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
+
+        x1 = self.dropout_layer(x1)
+
+        return x1
+
+
+class AvPool(torch.nn.Module):
+
+    def __init__(self, feat_dim, output_dim, dropout_ratio):
+        """
+        :param feat_dim:
+        :param output_dim:
+        :param dropout_ratio:
+        """
+        super(AvPool, self).__init__()
+        self.feat_dim = feat_dim
+        self.output_dim = output_dim
+
+        self.lin = nn.Linear(self.feat_dim * 2, self.output_dim, bias=False)
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+
+    def forward(self, x):
+        x = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
+        x = self.lin(x)
+
+        x = self.dropout_layer(x)
+
+        return x
+
+
+class WeiPool(torch.nn.Module):
+
+    def __init__(self, feat_dim, output_dim, dropout_ratio):
+        """
+        :param feat_dim:
+        :param output_dim:
+        :param dropout_ratio:
+        """
+        super(WeiPool, self).__init__()
+        self.feat_dim = feat_dim
+        self.output_dim = output_dim
+
+        self.lin = nn.Linear(self.feat_dim, self.output_dim, bias=False)
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+
+    def forward(self, x, D):
+        """
+        :param x:
+        :param D: 加权度矩阵
+        :return:
+        """
+        normD = D / D.sum()
+        x = torch.sum(torch.matmul(normD, x), dim=0)
+        x = self.leaky_relu(self.lin(x))
+
+        x = self.dropout_layer(x)
+
+        return x
+
+
 class AttMultiAgg(Module):
     """
     对三个尺度的表示进行注意力聚合
@@ -332,7 +424,7 @@ class AttMultiAgg(Module):
 
     def __init__(self, input_dim, output_dim, dropout_ratio):
         """
-        :param input_dim: 等于层次池化层的hidden_dim*2
+        :param input_dim: 等于层次池化层的输出维度，即hidden_dim*2
         :param output_dim:
         """
         super(AttMultiAgg, self).__init__()
@@ -375,9 +467,101 @@ class AttMultiAgg(Module):
         nn.init.xavier_uniform_(self.att_a_T)
 
 
+class AttMultiAgg_new(Module):
+    """
+    对三个尺度的表示进行注意力聚合
+    （没用dropout，先看效果）
+    """
+
+    def __init__(self, input_dim, output_dim, dropout_ratio):
+        """
+        :param input_dim: 等于层次池化层的输出维度，即hidden_dim*2
+        :param output_dim:
+        """
+        super(AttMultiAgg_new, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.attention = nn.Linear(self.input_dim * 2, self.output_dim, bias=False)
+        self.lin = nn.Linear(self.input_dim, self.output_dim, bias=False)
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+        self.elu = nn.ELU()
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+        # nn.init.xavier_normal_(self.attention.weight)
+
+    def forward(self, micro_x, meso_x, macro_x):
+        micro_micro_x = torch.cat([micro_x, micro_x], dim=1)  # 沿着列拼接，[节点数, input_dim*2]
+        micro_meso_x = torch.cat([micro_x, meso_x], dim=1)
+        micro_macro_x = torch.cat([micro_x, macro_x], dim=1)
+        # =====================
+        micro_micro_score = F.softmax(self.leaky_relu(self.attention(micro_micro_x)),
+                                      dim=1)  # [节点数, output_dim]
+        micro_meso_score = F.softmax(self.leaky_relu(self.attention(micro_meso_x)),
+                                     dim=1)
+        micro_macro_score = F.softmax(self.leaky_relu(self.attention(micro_macro_x)),
+                                      dim=1)
+        # =====================
+        micro_x = micro_micro_score * self.lin(micro_x)
+        meso_x = micro_meso_score * self.lin(meso_x)
+        macro_x = micro_macro_score * self.lin(macro_x)
+
+        x = micro_x + meso_x + macro_x
+        x = self.elu(x)
+        x = self.dropout_layer(x)
+
+        return x
+
+
+class AttMultiAgg_norm(Module):
+    """
+    对三个尺度的表示进行注意力聚合
+    （没用dropout，先看效果）
+    """
+
+    def __init__(self, input_dim, output_dim, dropout_ratio):
+        """
+        :param input_dim: 等于层次池化层的输出维度，即hidden_dim*2
+        :param output_dim:
+        """
+        super(AttMultiAgg_norm, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.attention = nn.Linear(self.input_dim * 2, self.output_dim, bias=False)
+        self.lin = nn.Linear(self.input_dim, self.output_dim, bias=False)
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+        self.elu = nn.ELU()
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+        # nn.init.xavier_normal_(self.attention.weight)
+
+    def forward(self, micro_x, meso_x, macro_x):
+        micro_micro_x = torch.cat([micro_x, micro_x], dim=1)  # 沿着列拼接，[节点数, input_dim*2]
+        micro_meso_x = torch.cat([micro_x, meso_x], dim=1)
+        micro_macro_x = torch.cat([micro_x, macro_x], dim=1)
+        # =====================
+        micro_micro_score = F.softmax(self.leaky_relu(self.attention(micro_micro_x)),
+                                      dim=1)  # [节点数, output_dim]
+        micro_meso_score = F.softmax(self.leaky_relu(self.attention(micro_meso_x)),
+                                     dim=1)
+        micro_macro_score = F.softmax(self.leaky_relu(self.attention(micro_macro_x)),
+                                      dim=1)
+        # =====================
+        micro_micro_score = micro_micro_score / (micro_micro_score + micro_meso_score + micro_macro_score)
+        micro_meso_score = micro_meso_score / (micro_micro_score + micro_meso_score + micro_macro_score)
+        micro_macro_score = micro_macro_score / (micro_micro_score + micro_meso_score + micro_macro_score)
+        # =====================
+        micro_x = micro_micro_score * self.lin(micro_x)
+        meso_x = micro_meso_score * self.lin(meso_x)
+        macro_x = micro_macro_score * self.lin(macro_x)
+
+        x = micro_x + meso_x + macro_x
+        x = self.elu(x)
+        x = self.dropout_layer(x)
+
+        return x
+
+
 class FCNN(nn.Module):
     """
-    解码器
+    解码器(预测Ahat)
     """
 
     def __init__(self, input_dim, hidden_dim, output_dim, dropout_ratio):

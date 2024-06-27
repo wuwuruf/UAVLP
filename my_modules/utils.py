@@ -106,6 +106,17 @@ def get_recall_score(pred_adj, gnd):
     return recall_score(np.reshape(gnd, (-1,)), np.reshape(pred_adj, (-1,)))
 
 
+def get_D_by_edge_index_and_weight(edge_index, edge_weight, num_nodes):
+    D = np.zeros((num_nodes, num_nodes))
+    for i in range(len(edge_index[0])):
+        node1 = edge_index[0][i]
+        node2 = edge_index[1][i]
+        wei = edge_weight[i]
+        D[node1, node1] += wei
+        D[node2, node2] += wei
+    return D
+
+
 def get_RMSE(adj_est, gnd, num_nodes):
     '''
     Function to get the RMSE (root mean square error) metric

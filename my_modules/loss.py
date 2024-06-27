@@ -27,7 +27,7 @@ def get_refined_loss(beta, gnd_list, pred_adj_list, theta):
     return loss
 
 
-def get_corss_reg_loss(beta, gnd_list, pred_adj_list, theta):
+def get_corss_reg_loss(beta, gnd_list, pred_adj_list, theta, lambda_cross_entropy=20, lambda_reg=0.0005):
     """
     获取适应稀疏情况的不加权重构误差，交叉熵损失和1范数正则化
     """
@@ -43,11 +43,9 @@ def get_corss_reg_loss(beta, gnd_list, pred_adj_list, theta):
         reconstruction_loss = torch.mean(torch.sum(weight * torch.square(gnd - pred_adj), dim=1), dim=-1)
 
         # 计算交叉熵损失
-        lambda_cross_entropy = 20
         cross_entropy_loss = lambda_cross_entropy * F.binary_cross_entropy(pred_adj, gnd)
 
         # 计算1范数正则化项
-        lambda_reg = 0.0005
         l1_regularization = lambda_reg * torch.sum(torch.abs(pred_adj))
 
         # 总损失
@@ -70,7 +68,7 @@ def get_single_refined_loss(beta, gnd, pred_adj):
     return loss
 
 
-def get_single_corss_reg_loss(beta, gnd, pred_adj):
+def get_single_corss_reg_loss(beta, gnd, pred_adj, lambda_cross_entropy=20, lambda_reg=0.0005):
     """
     获取适应稀疏情况的不加权重构误差，交叉熵损失和1范数正则化
     :param beta: 加权系数
@@ -83,11 +81,9 @@ def get_single_corss_reg_loss(beta, gnd, pred_adj):
     reconstruction_loss = torch.mean(torch.sum(weight * torch.square(gnd - pred_adj), dim=1), dim=-1)
 
     # 计算交叉熵损失
-    lambda_cross_entropy = 20
     cross_entropy_loss = lambda_cross_entropy * F.binary_cross_entropy(pred_adj, gnd)
 
     # 计算1范数正则化项
-    lambda_reg = 0.0005
     l1_regularization = lambda_reg * torch.sum(torch.abs(pred_adj))
 
     # 总损失
@@ -125,6 +121,30 @@ def get_loss(adj_est_list, gnd_list, max_thres, alpha, beta, theta):
         p = gnd
         p = torch.where(p < epsilon, E, p)
         loss += decay * beta * torch.sum(torch.abs(torch.log10(p / q)))
+
+    return loss
+
+
+def get_wei_loss(adj_est_list, gnd_list, beta, theta):
+    '''
+    Function to define the loss of generator (in the formal optimization)
+    :param adj_est_list: list of prediction results
+    :param gnd_list: list of ground-truth
+    :param alpha: parameter to control ME loss
+    :param beta: parameter to control SDM loss
+    :param theta: parameter of decaying factor
+    :return: loss of generator
+    '''
+    # ====================
+    loss = 0.0
+    win_size = len(adj_est_list)
+    for i in range(win_size):
+        pred_adj = adj_est_list[i]
+        gnd = gnd_list[i]
+        decay = (1 - theta) ** (win_size - i - 1)  # Decaying factor
+        # ==========
+        weight = gnd * (beta - 1) + 1
+        loss += decay * torch.mean(torch.sum(weight * torch.square(gnd - pred_adj), dim=1), dim=-1)
 
     return loss
 

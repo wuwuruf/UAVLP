@@ -16,7 +16,7 @@ import torch
 import numpy as np
 
 # 读取npy文件
-data = np.load('../data/UAV_data/UAV_GM_360_r=400_edge_seq.npy', allow_pickle=True)
+data = np.load('../data/UAV_data/GM_2000_edge_seq.npy', allow_pickle=True)
 # data = np.load('../emb_Node2Vec/emb_Node2Vec_UAV_RPGM_360_r=300_dim=64.npy', allow_pickle=True)
 
 # 显示npy文件中的内容
@@ -32,7 +32,7 @@ print(data[3])
 max_weight = 0
 for i in range(len(data)):
     for j in range(len(data[i])):
-        max_weight = max(data[i][j][1], max_weight)
+        max_weight = max(data[i][j][2], max_weight)
 print("最大边权重为：", max_weight)
 
 # 计算平均边密度

@@ -18,7 +18,7 @@ import numpy as np
 # G = nx.karate_club_graph()
 # # compute the best partition
 # partition = community_louvain.best_partition(G)
-data_name = "UAV_GM_360_r=300"
+data_name = "GM_2000"
 edge_seq_list = np.load('../data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
 feat = np.load('../data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
 # 创建一个新的无向图

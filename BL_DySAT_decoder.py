@@ -56,30 +56,30 @@ def setup_seed(seed):
 
 
 setup_seed(0)
-data_name = 'UAV_RPGM_360_r=300'
+data_name = 'GM_2000'
 num_nodes = 100
 num_snaps = 180
-max_thres = 100  # Threshold for maximum edge weight
+max_thres = 4.64  # Threshold for maximum edge weight
 num_val_snaps = 10
 num_test_snaps = 20  # Number of test snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps
-num_epochs = 500
+num_epochs = 400
 emb_dim = 128
 decoder_hidden_dim = 256
 dropout_ratio = 0.5
 win_size = 10
-save_flag = True
+save_flag = False
 
 # =================================================
-alpha = 20  # Parameter to balance the ER loss
-beta = 0.1  # Parameter to balance the SDM loss
 sparse_beta = 2
+lambd_cross = 0
+lambd_reg = 0.0005
 # =================================================
 epsilon = 0.01  # Threshold of the zero-refining
 
 edge_seq = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
 edge_seq = edge_seq[:180]
-data_name = 'UAV_RPGM_180_r=300'
+data_name = 'GM_2000_180'
 emb_list = np.load('emb_DySAT/emb_DySAT_%s_dim=%d.npy' % (data_name, emb_dim))
 #
 # ===============================================
@@ -95,7 +95,7 @@ for epoch in range(num_epochs):
     for i in range(0, num_train_snaps - win_size):
         # count = count + 1
         emb_tnr = torch.FloatTensor(emb_list[i]).to(device)  # 获取当前窗口内最后一个时刻的嵌入
-        emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵行向量进行标准化
+        emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
         adj_est = decoder(emb_tnr)
         # ===========================
         # 加权预测
@@ -108,7 +108,7 @@ for epoch in range(num_epochs):
         # 不加权预测
         gnd = get_adj_no_wei(edge_seq[i + win_size], num_nodes)
         gnd_tnr = torch.FloatTensor(gnd).to(device)
-        decoder_loss = get_single_corss_reg_loss(sparse_beta, gnd_tnr, adj_est)
+        decoder_loss = get_single_corss_reg_loss(sparse_beta, gnd_tnr, adj_est, lambd_cross, lambd_reg)
         # ==========================
         decoder_opt.zero_grad()
         decoder_loss.backward()
@@ -135,6 +135,7 @@ for epoch in range(num_epochs):
         # count = count + 1
         # Get and refine the prediction result
         emb_tnr = torch.FloatTensor(emb_list[i]).to(device)
+        emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
         adj_est = decoder(emb_tnr)
         adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
         # ========================================
