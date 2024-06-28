@@ -10,7 +10,7 @@ from community import community_louvain
 import datetime
 
 
-data_name = 'GM_2000'
+data_name = 'GM_2000_6'
 num_snaps = 180
 max_weight = 100
 # =================
@@ -39,7 +39,7 @@ feat = np.load('../data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
 feat_list = []
 for i in range(num_snaps):
     feat_list.append(feat)
-data_name = 'GM_2000_180'
+data_name = 'GM_2000_6_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []

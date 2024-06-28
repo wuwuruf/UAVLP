@@ -154,7 +154,8 @@ class IGRU(Module):
         # ==========
         # Next state
         next_state = torch.mul((1 - update_output), pre_state) + torch.mul(update_output, act_output)
-        next_state = self.dropout_layer(next_state)
+        if self.training:
+            next_state = self.dropout_layer(next_state)
 
         return next_state
 
@@ -209,23 +210,24 @@ class ILSTM(Module):
         combined = torch.cat((cur_input, pre_state), dim=1)
 
         # Input gate
-        input_gate = torch.sigmoid(torch.mm(combined, self.param[0]) + self.param[1])
+        input_gate = torch.sigmoid(torch.matmul(combined, self.param[0]) + self.param[1])
 
         # Forget gate
-        forget_gate = torch.sigmoid(torch.mm(combined, self.param[2]) + self.param[3])
+        forget_gate = torch.sigmoid(torch.matmul(combined, self.param[2]) + self.param[3])
 
         # Cell candidate
-        cell_candidate = torch.tanh(torch.mm(combined, self.param[4]) + self.param[5])
+        cell_candidate = torch.tanh(torch.matmul(combined, self.param[4]) + self.param[5])
 
         # Output gate
-        output_gate = torch.sigmoid(torch.mm(combined, self.param[6]) + self.param[7])
+        output_gate = torch.sigmoid(torch.matmul(combined, self.param[6]) + self.param[7])
 
         # Next cell state
         next_cell = torch.mul(forget_gate, pre_cell) + torch.mul(input_gate, cell_candidate)
 
         # Next hidden state
         next_state = torch.mul(output_gate, torch.tanh(next_cell))
-        next_state = self.dropout_layer(next_state)
+        if self.training:
+            next_state = self.dropout_layer(next_state)
 
         return next_state, next_cell
 
@@ -316,8 +318,8 @@ class HierarchicalPool(torch.nn.Module):
         x3 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
 
         x = x1 + x2 + x3
-
-        x = self.dropout_layer(x)
+        if self.training:
+            x = self.dropout_layer(x)
 
         # return x1
 
@@ -355,8 +357,8 @@ class SimplePool(torch.nn.Module):
         x, edge_index = self.pool1(x, edge_index, None)  # 这里输出的edge_index与原来的edge_index边顺序是不同的
 
         x1 = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
-
-        x1 = self.dropout_layer(x1)
+        if self.training:
+            x1 = self.dropout_layer(x1)
 
         return x1
 
@@ -379,8 +381,8 @@ class AvPool(torch.nn.Module):
     def forward(self, x):
         x = torch.cat([gmp(x, batch=None), gap(x, batch=None)], dim=1)
         x = self.lin(x)
-
-        x = self.dropout_layer(x)
+        if self.training:
+            x = self.dropout_layer(x)
 
         return x
 
@@ -410,8 +412,8 @@ class WeiPool(torch.nn.Module):
         normD = D / D.sum()
         x = torch.sum(torch.matmul(normD, x), dim=0)
         x = self.leaky_relu(self.lin(x))
-
-        x = self.dropout_layer(x)
+        if self.training:
+            x = self.dropout_layer(x)
 
         return x
 
@@ -459,7 +461,8 @@ class AttMultiAgg(Module):
         # =====================
         x = micro_x + meso_x + macro_x
         x = self.elu(x)
-        x = self.dropout_layer(x)
+        if self.training:
+            x = self.dropout_layer(x)
 
         return x
 
@@ -506,7 +509,8 @@ class AttMultiAgg_new(Module):
 
         x = micro_x + meso_x + macro_x
         x = self.elu(x)
-        x = self.dropout_layer(x)
+        if self.training:
+            x = self.dropout_layer(x)
 
         return x
 
@@ -554,7 +558,8 @@ class AttMultiAgg_norm(Module):
 
         x = micro_x + meso_x + macro_x
         x = self.elu(x)
-        x = self.dropout_layer(x)
+        if self.training:
+            x = self.dropout_layer(x)
 
         return x
 
@@ -584,6 +589,7 @@ class FCNN(nn.Module):
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
-        x = self.dropout(x)
+        if self.training:
+            x = self.dropout(x)
         x = torch.sigmoid(self.fc2(x))
         return x

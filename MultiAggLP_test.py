@@ -30,13 +30,13 @@ def setup_seed(seed):
 
 setup_seed(0)
 
-data_name = 'GM_2000'
+data_name = 'GM_2000_2'
 num_nodes = 100  # Number of nodes
 num_snaps = 180  # Number of snapshots
 max_thres = 100  # Threshold for maximum edge weight
 feat_dim = 132  # Dimensionality of node feature
 GAT_output_dim = 128
-micro_dims = [feat_dim, 64, GAT_output_dim]  # 两层GAT的输入维度、隐藏维度，输出维度
+micro_dims = [feat_dim, 128, GAT_output_dim]  # 两层GAT的输入维度、隐藏维度，输出维度
 pooling_ratio = 0.8
 agg_feat_dim = GAT_output_dim
 RNN_dims = [agg_feat_dim, agg_feat_dim, agg_feat_dim]  # 两层GRU的维度
@@ -131,7 +131,7 @@ for edge_weight_com_list_notnr in edge_weight_com_list_list_notnr:
 
 # =====================
 # 测试模型
-model = torch.load('my_pt/MultiAggLP_binary_12.pkl')
+model = torch.load('my_pt/MultiAggLP_weipool_579.pkl')
 model.eval()
 current_time = datetime.datetime.now().time().strftime("%H:%M:%S")
 # =============

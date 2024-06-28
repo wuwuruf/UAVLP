@@ -32,21 +32,21 @@ import pandas as pd
 
 # =====================================
 # 读取 txt 文件，指定空格为分隔符，设置表头
-df = pd.read_csv('testbm6_GM.txt', sep='\s+', header=0)
+df = pd.read_csv('testbm9_GM.txt', sep='\s+', header=0)
 
 # 修改列名
 df.columns = ['ID', 'time', 'x', 'y']
 
 # 将 DataFrame 保存为 CSV 文件，指定逗号为分隔符
-df.to_csv('GM_location_360s.csv', index=False, sep=',')
+df.to_csv('GM_location_1080s.csv', index=False, sep=',')
 
-# =======================================
-# 读取CSV文件
-data = pd.read_csv('GM_location_360s.csv')
-
-# 删除属性为Time且数值大于360的行
-data = data[data['time'] <= 360]
-
-# 保存修改后的文件（可选）
-data.to_csv('GM_location_360s.csv', index=False)
+# # =======================================
+# # 读取CSV文件
+# data = pd.read_csv('GM_location_360s_4.csv')
+#
+# # 删除属性为Time且数值大于360的行
+# data = data[data['time'] <= 360]
+#
+# # 保存修改后的文件（可选）
+# data.to_csv('GM_location_360s_4.csv', index=False)
 

@@ -114,6 +114,11 @@ def get_D_by_edge_index_and_weight(edge_index, edge_weight, num_nodes):
         wei = edge_weight[i]
         D[node1, node1] += wei
         D[node2, node2] += wei
+
+    # 社团内只有一个节点的特殊情况！！
+    if len(edge_index[0]) == 0:
+        D[0, 0] = 1.
+
     return D
 
 

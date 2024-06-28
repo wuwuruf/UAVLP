@@ -13,11 +13,11 @@ import math
 
 # 参数设置
 r = 2000  # 通信半径
-data_name = 'GM_2000_WEI'
+data_name = 'GM_2000_6'
 # ========================================
 # ========== 构建edge_seq===============
 # 读取csv文件
-df = pd.read_csv('GM_location_360s.csv')
+df = pd.read_csv('GM_location_1080s.csv')
 df_SNR = pd.read_csv('snr_data.csv')
 
 edge_seq = []
@@ -121,23 +121,24 @@ np.save('%s_edge_seq.npy' % data_name, np.array(edge_seq, dtype=object))
 # ========================================
 # ========查看边数量变化情况===============
 # 从npy文件中加载edge_seq
+# data_name = 'GM_2000_2'
 # edge_seq = np.load('%s_edge_seq.npy' % data_name, allow_pickle=True)
 
-# # 计算每张图快照的边数量
-# num_edges = [len(edges) for edges in edge_seq]
-#
-# # 绘制图像
-# plt.figure(figsize=(12, 6))
-# plt.plot(range(1, len(num_edges) + 1), num_edges, color='b', linestyle='-')
-#
-# # 添加标题和标签
-# plt.title('Number of Edges in Each Snapshot')
-# plt.xlabel('Snapshot Number')
-# plt.ylabel('Number of Edges')
-#
-# # 显示网格线
-# plt.grid(True)
-# plt.savefig(f'edge_num_GM_2000.png')
-#
-# # 显示图形
-# plt.show()
+# 计算每张图快照的边数量
+num_edges = [len(edges) for edges in edge_seq]
+
+# 绘制图像
+plt.figure(figsize=(12, 6))
+plt.plot(range(1, len(num_edges) + 1), num_edges, color='b', linestyle='-')
+
+# 添加标题和标签
+plt.title('Number of Edges in Each Snapshot')
+plt.xlabel('Snapshot Number')
+plt.ylabel('Number of Edges')
+
+# 显示网格线
+plt.grid(True)
+plt.savefig(f'edge_num_GM_2000_6.png')
+
+# 显示图形
+plt.show()
