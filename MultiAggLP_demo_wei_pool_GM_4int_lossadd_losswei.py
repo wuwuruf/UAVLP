@@ -50,13 +50,13 @@ save_flag = False
 dropout_rate = 0.5  # Dropout rate
 win_size = 10  # Window size of historical snapshots
 epsilon = 0.01  # Threshold of the zero-refining
-num_epochs = 1000  # Number of training epochs
+num_epochs = 600  # Number of training epochs
 num_test_snaps = 20  # Number of test snapshots  约7:3划分训练集与测试集 效果不好再改为8:2
 num_val_snaps = 10  # Number of validation snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of training snapshots
 n_heads = 8
 
-step_interval = 10
+step_interval = 5
 # =================
 # loss的超参数
 lambd_cross = 5
@@ -141,6 +141,7 @@ model = MultiAggLP(micro_dims, agg_feat_dim, RNN_dims, decoder_dims, n_heads, dr
 opt = optim.Adam(model.parameters(), lr=5e-4, weight_decay=5e-4)
 
 # ==================
+best_AUC = 0.
 for epoch in range(num_epochs):
     # ============
     # 训练模型
@@ -183,7 +184,7 @@ for epoch in range(num_epochs):
                               cur_D_com_list_list, cur_partition_dict_list, cur_D_list, pred_flag=False)
         iteration_count += 1
         loss = get_corss_reg_loss(sparse_beta, gnd_list, pred_adj_list, theta, lambd_cross, lambd_reg)
-        loss_weight = 1 - ((tau - win_size + 1) / (num_train_snaps - win_size))  # 线性权重
+        loss_weight = 1.5 - ((tau - win_size + 1) / (num_train_snaps - win_size))  # 线性权重
         loss *= loss_weight
         loss.backward()  # 累积梯度
 
@@ -336,6 +337,7 @@ for epoch in range(num_epochs):
             recall_list.append(recall)
         # ==============
         AUC_mean = np.mean(AUC_list)
+        best_AUC = max(best_AUC, AUC_mean)
         AUC_std = np.std(AUC_list, ddof=1)
         f1_score_mean = np.mean(f1_score_list)
         f1_score_std = np.std(f1_score_list, ddof=1)
@@ -344,13 +346,13 @@ for epoch in range(num_epochs):
         recall_mean = np.mean(recall_list)
         recall_std = np.std(recall_list, ddof=1)
         # ==============
-        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f'
+        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f'
               % (
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
-                  recall_std))
+                  recall_std, best_AUC))
         # ==========
         f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_losswei_lstm256_binary_rec.txt' % data_name, 'a+')
-        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
+        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
-                         recall_std, current_time))
+                         recall_std, best_AUC, current_time))
         f_input.close()

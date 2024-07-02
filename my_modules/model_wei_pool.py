@@ -93,6 +93,8 @@ class MultiAggLP(Module):
             micro_layer = self.micro_GAT_layers[l]
             output_micro_feat_list = []
             for t in range(win_size):
+                # if l == 0 and t == 9:
+                #     print(1)
                 output_micro_feat = micro_layer(edge_index_list[t], edge_weight_list[t], input_micro_feat_list[t])
                 output_micro_feat_list.append(output_micro_feat)
             input_micro_feat_list = output_micro_feat_list
@@ -108,6 +110,8 @@ class MultiAggLP(Module):
                 cur_com_nodes_list = [key for key, value in partition_dict.items() if
                                       value == com_idx]  # 找出属于当前社团的节点编号列表
                 D_com = D_com_list[com_idx]
+                # if t == 9 and com_idx == 8:
+                #     print(2)  # 第四次的t == 9时
                 output_meso_com_feat = self.meso_pooling_layers(output_micro_feat[cur_com_nodes_list],
                                                                 D_com)  # 该社团内进行池化得到的特征
                 output_meso_feat[cur_com_nodes_list] = output_meso_com_feat  # 将介观特征矩阵的对应当前社团的行直接赋值为当前社团池化特征

@@ -44,18 +44,20 @@ pooling_ratio = 0.8
 agg_feat_dim = GAT_output_dim
 RNN_dims = [agg_feat_dim, 256, 256]  # 两层GRU的维度
 decoder_dims = [RNN_dims[-1], 256, num_nodes]  # 解码器两层全连接的维度
-save_flag = False
+save_flag = True
 
 # =================
 dropout_rate = 0.5  # Dropout rate
 win_size = 10  # Window size of historical snapshots
 epsilon = 0.01  # Threshold of the zero-refining
-num_epochs = 1000  # Number of training epochs
+num_epochs = 800  # Number of training epochs
 num_test_snaps = 20  # Number of test snapshots  约7:3划分训练集与测试集 效果不好再改为8:2
 num_val_snaps = 10  # Number of validation snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of training snapshots
 n_heads = 8
-
+# =================
+step_interval = 5
+early_stop_epochs = 100
 # =================
 # loss的超参数
 lambd_cross = 5
@@ -140,6 +142,9 @@ model = MultiAggLP(micro_dims, agg_feat_dim, RNN_dims, decoder_dims, n_heads, dr
 opt = optim.Adam(model.parameters(), lr=5e-4, weight_decay=5e-4)
 
 # ==================
+best_AUC = 0.
+best_val_AUC = 0.
+no_improve_epochs = 0
 for epoch in range(num_epochs):
     # ============
     # 训练模型
@@ -156,7 +161,6 @@ for epoch in range(num_epochs):
     # 对列表进行随机打乱
     random.shuffle(indices)
     # =======================
-    step_interval = 5
     iteration_count = 0
     # =================
     for tau in indices:  # 遍历训练集的所有待预测时刻
@@ -259,6 +263,13 @@ for epoch in range(num_epochs):
         recall_list.append(recall)
     # ==============
     AUC_mean = np.mean(AUC_list)
+    best_val_AUC = max(best_val_AUC, AUC_mean)
+    if AUC_mean < best_val_AUC:
+        no_improve_epochs += 1
+        if no_improve_epochs >= early_stop_epochs:
+            break
+    else:
+        no_improve_epochs = 0
     AUC_std = np.std(AUC_list, ddof=1)
     f1_score_mean = np.mean(f1_score_list)
     f1_score_std = np.std(f1_score_list, ddof=1)
@@ -271,7 +282,7 @@ for epoch in range(num_epochs):
           % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
              recall_std))
     # ==========
-    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_lstm256_binary_rec.txt' % data_name, 'a+')
+    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_binary_rec.txt' % data_name, 'a+')
     f_input.write('Val #%d Loss %f AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
                   % (epoch, loss_mean, AUC_mean, AUC_std, f1_score_mean, f1_score_std,
                      precision_mean, precision_std, recall_mean, recall_std, current_time))
@@ -334,6 +345,7 @@ for epoch in range(num_epochs):
             recall_list.append(recall)
         # ==============
         AUC_mean = np.mean(AUC_list)
+        best_AUC = max(best_AUC, AUC_mean)
         AUC_std = np.std(AUC_list, ddof=1)
         f1_score_mean = np.mean(f1_score_list)
         f1_score_std = np.std(f1_score_list, ddof=1)
@@ -342,13 +354,13 @@ for epoch in range(num_epochs):
         recall_mean = np.mean(recall_list)
         recall_std = np.std(recall_list, ddof=1)
         # ==============
-        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f'
+        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f'
               % (
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
-                  recall_std))
+                  recall_std, best_AUC))
         # ==========
-        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_lstm256_binary_rec.txt' % data_name, 'a+')
-        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
+        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_binary_rec.txt' % data_name, 'a+')
+        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
-                         recall_std, current_time))
+                         recall_std, best_AUC, current_time))
         f_input.close()

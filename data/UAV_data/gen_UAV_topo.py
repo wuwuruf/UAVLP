@@ -12,12 +12,12 @@ import matplotlib.pyplot as plt
 import math
 
 # 参数设置
-r = 2000  # 通信半径
-data_name = 'GM_2000_6'
+r = 1000  # 通信半径
+data_name = 'RPGM_1000_2_13'
 # ========================================
 # ========== 构建edge_seq===============
 # 读取csv文件
-df = pd.read_csv('GM_location_1080s.csv')
+df = pd.read_csv('RPGM_location_360s_13.csv')
 df_SNR = pd.read_csv('snr_data.csv')
 
 edge_seq = []
@@ -66,21 +66,21 @@ np.save('%s_edge_seq.npy' % data_name, np.array(edge_seq, dtype=object))
 
 
 # =======构建feat===========
-# # 创建一个空的feat数组，数据类型为float64，形状为（100，32）
-# feat = np.zeros((100, 32), dtype=np.float64)
-#
-# # IP地址范围从10.0.1.0到10.0.100.0
-# start_ip = 167772160  # 对应10.0.1.0的整数表示
-# end_ip = 168034304  # 对应10.0.100.0的整数表示
-#
-# # 将IP地址转换为32位二进制形式，并存储到feat数组中
-# for i in range(100):
-#     ip_int = start_ip + (i + 1) * 256  # 每个节点之间的IP地址差为256
-#     ip_bin = format(ip_int, '032b')
-#     feat[i] = np.array([int(bit) for bit in ip_bin])
-#
-# # 保存feat数组为npy文件
-# np.save('%s_feat.npy' % data_name, feat)
+# 创建一个空的feat数组，数据类型为float64，形状为（100，32）
+feat = np.zeros((100, 32), dtype=np.float64)
+
+# IP地址范围从10.0.1.0到10.0.100.0
+start_ip = 167772160  # 对应10.0.1.0的整数表示
+end_ip = 168034304  # 对应10.0.100.0的整数表示
+
+# 将IP地址转换为32位二进制形式，并存储到feat数组中
+for i in range(100):
+    ip_int = start_ip + (i + 1) * 256  # 每个节点之间的IP地址差为256
+    ip_bin = format(ip_int, '032b')
+    feat[i] = np.array([int(bit) for bit in ip_bin])
+
+# 保存feat数组为npy文件
+np.save('%s_feat.npy' % data_name, feat)
 # ====================================================
 
 
@@ -138,7 +138,7 @@ plt.ylabel('Number of Edges')
 
 # 显示网格线
 plt.grid(True)
-plt.savefig(f'edge_num_GM_2000_6.png')
+plt.savefig(f'edge_num_%s.png' % data_name)
 
 # 显示图形
 plt.show()

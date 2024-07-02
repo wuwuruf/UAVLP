@@ -32,13 +32,13 @@ import pandas as pd
 
 # =====================================
 # 读取 txt 文件，指定空格为分隔符，设置表头
-df = pd.read_csv('testbm9_GM.txt', sep='\s+', header=0)
+df = pd.read_csv('testbm14_RPGM.txt', sep='\s+', header=0)
 
 # 修改列名
 df.columns = ['ID', 'time', 'x', 'y']
 
 # 将 DataFrame 保存为 CSV 文件，指定逗号为分隔符
-df.to_csv('GM_location_1080s.csv', index=False, sep=',')
+df.to_csv('RPGM_location_360s_14.csv', index=False, sep=',')
 
 # # =======================================
 # # 读取CSV文件

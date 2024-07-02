@@ -18,16 +18,16 @@ import numpy as np
 # G = nx.karate_club_graph()
 # # compute the best partition
 # partition = community_louvain.best_partition(G)
-data_name = "GM_2000_4"
-edge_seq_list = np.load('../data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
-feat = np.load('../data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
+data_name = "RPGM_1000_2"
+edge_seq_list = np.load('../data/UAV_data/%s_4_edge_seq.npy' % data_name, allow_pickle=True)
+feat = np.load('../data/UAV_data/%s_4_feat.npy' % data_name, allow_pickle=True)
 # 创建一个新的无向图
 G = nx.Graph()
 # 添加节点特征
 for i, f in enumerate(feat):
     G.add_node(i, feature=f)
 # 添加边和权重
-for edge in edge_seq_list[90]:
+for edge in edge_seq_list[60]:
     node1, node2, weight = edge
     G.add_edge(node1, node2, weight=weight)
 

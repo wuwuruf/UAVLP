@@ -42,7 +42,7 @@ def get_corss_reg_loss(beta, gnd_list, pred_adj_list, theta, lambda_cross_entrop
         weight = gnd * (beta - 1) + 1
         reconstruction_loss = torch.mean(torch.sum(weight * torch.square(gnd - pred_adj), dim=1), dim=-1)
 
-        # 计算交叉熵损失
+        # 计算交叉熵损失（pred_adj_list[3]有问题）
         cross_entropy_loss = lambda_cross_entropy * F.binary_cross_entropy(pred_adj, gnd)
 
         # 计算1范数正则化项

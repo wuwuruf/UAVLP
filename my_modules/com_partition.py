@@ -10,12 +10,12 @@ from community import community_louvain
 import datetime
 
 
-data_name = 'GM_2000_6'
+data_name = 'RPGM_1000_2'
 num_snaps = 180
 max_weight = 100
 # =================
 
-edge_seq_list = np.load('../data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
+edge_seq_list = np.load('../data/UAV_data/%s_5_edge_seq.npy' % data_name, allow_pickle=True)
 edge_seq_list = edge_seq_list[0:180]
 # 转成合适的格式
 edge_index_list = []
@@ -34,12 +34,12 @@ for i in range(num_snaps):
     edge_weight_list.append(edge_weight)
 # ===================
 # feat = np.load('../data/UAV_data_interval=5/%s_feat.npy' % data_name, allow_pickle=True)
-feat = np.load('../data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
+feat = np.load('../data/UAV_data/%s_5_feat.npy' % data_name, allow_pickle=True)
 
 feat_list = []
 for i in range(num_snaps):
     feat_list.append(feat)
-data_name = 'GM_2000_6_180'
+data_name = 'RPGM_1000_2_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []

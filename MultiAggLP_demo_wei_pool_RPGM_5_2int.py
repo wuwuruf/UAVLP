@@ -33,7 +33,7 @@ def setup_seed(seed):
 
 setup_seed(0)
 
-data_name = 'GM_2000_4'
+data_name = 'RPGM_1000_2'
 num_nodes = 100  # Number of nodes
 num_snaps = 180  # Number of snapshots
 max_thres = 100  # Threshold for maximum edge weight
@@ -44,27 +44,29 @@ pooling_ratio = 0.8
 agg_feat_dim = GAT_output_dim
 RNN_dims = [agg_feat_dim, 256, 256]  # 两层GRU的维度
 decoder_dims = [RNN_dims[-1], 256, num_nodes]  # 解码器两层全连接的维度
-save_flag = False
+save_flag = True
 
 # =================
 dropout_rate = 0.5  # Dropout rate
 win_size = 10  # Window size of historical snapshots
 epsilon = 0.01  # Threshold of the zero-refining
-num_epochs = 1000  # Number of training epochs
+num_epochs = 800  # Number of training epochs
 num_test_snaps = 20  # Number of test snapshots  约7:3划分训练集与测试集 效果不好再改为8:2
 num_val_snaps = 10  # Number of validation snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of training snapshots
 n_heads = 8
-
+# =================
+step_interval = 5
+early_stop_epochs = 70
 # =================
 # loss的超参数
 lambd_cross = 5
 lambd_reg = 0.001
 theta = 0.2  # Decaying factor
-sparse_beta = 10
+sparse_beta = 30
 
 # =================
-edge_seq_list = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
+edge_seq_list = np.load('data/UAV_data/%s_5_edge_seq.npy' % data_name, allow_pickle=True)
 edge_seq_list = edge_seq_list[0:180]
 # # 转成合适的格式
 edge_index_list = []
@@ -85,14 +87,14 @@ for i in range(num_snaps):
     edge_index_list.append(edge_index_tnr)
     edge_weight_list.append(edge_weight_tnr)
     D_list.append(D_tnr)
-feat = np.load('data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
+feat = np.load('data/UAV_data/%s_5_feat.npy' % data_name, allow_pickle=True)
 feat_tnr = torch.FloatTensor(feat).to(device)  # 放到GPU上
 feat_list = []
 for i in range(num_snaps):
     adj = get_adj_wei(edge_seq_list[i], num_nodes, max_thres)
     adj_tnr = torch.FloatTensor(adj).to(device)
     feat_list.append(torch.cat([feat_tnr, adj_tnr], dim=1))
-data_name = 'GM_2000_4_180'
+data_name = 'RPGM_1000_2_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []
@@ -140,6 +142,9 @@ model = MultiAggLP(micro_dims, agg_feat_dim, RNN_dims, decoder_dims, n_heads, dr
 opt = optim.Adam(model.parameters(), lr=5e-4, weight_decay=5e-4)
 
 # ==================
+best_AUC = 0.
+best_val_AUC = 0.
+no_improve_epochs = 0
 for epoch in range(num_epochs):
     # ============
     # 训练模型
@@ -155,6 +160,8 @@ for epoch in range(num_epochs):
     indices = list(range(win_size, num_train_snaps))
     # 对列表进行随机打乱
     random.shuffle(indices)
+    # =======================
+    iteration_count = 0
     # =================
     for tau in indices:  # 遍历训练集的所有待预测时刻
         # ================
@@ -178,22 +185,29 @@ for epoch in range(num_epochs):
         # 预测及计算损失，反向传播优化参数
         pred_adj_list = model(cur_edge_index_list, cur_edge_weight_list, cur_feat_list,
                               cur_D_com_list_list, cur_partition_dict_list, cur_D_list, pred_flag=False)
+        iteration_count += 1
         loss = get_corss_reg_loss(sparse_beta, gnd_list, pred_adj_list, theta, lambd_cross, lambd_reg)
-        loss_weight = 1 - ((tau - win_size + 1) / (num_train_snaps - win_size))  # 线性权重
-        loss *= loss_weight
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+        loss.backward()  # 累积梯度
+
+        if iteration_count % step_interval == 0:
+            opt.step()
+            opt.zero_grad()
+            iteration_count = 0
+
         # ===============
         loss_list.append(loss.item())
         train_cnt += 1
         # if train_cnt % 20 == 0:
         #     print('-Train %d / %d' % (train_cnt, num_train_snaps))
+    # 在最后一次循环后，确保执行梯度更新
+    if iteration_count % step_interval != 0:
+        opt.step()
+        opt.zero_grad()
     loss_mean = np.mean(loss_list)
     print('Epoch#%d Train G-Loss %f' % (epoch, loss_mean))
 
     if save_flag:
-        torch.save(model, 'my_pt/MultiAggLP_weipool_no_lossadd_losswei_%d.pkl' % epoch)
+        torch.save(model, 'my_pt/%s_MultiAggLP_%d.pkl' % (data_name, epoch))
     # =====================
     # 验证模型
     model.eval()
@@ -249,6 +263,13 @@ for epoch in range(num_epochs):
         recall_list.append(recall)
     # ==============
     AUC_mean = np.mean(AUC_list)
+    best_val_AUC = max(best_val_AUC, AUC_mean)
+    if AUC_mean < best_val_AUC:
+        no_improve_epochs += 1
+        if no_improve_epochs >= early_stop_epochs:
+            break
+    else:
+        no_improve_epochs = 0
     AUC_std = np.std(AUC_list, ddof=1)
     f1_score_mean = np.mean(f1_score_list)
     f1_score_std = np.std(f1_score_list, ddof=1)
@@ -261,12 +282,11 @@ for epoch in range(num_epochs):
           % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
              recall_std))
     # ==========
-    f_input = open('res/%s_MultiAggLP_norm_weipool_no_lossadd_losswei_lstm256_binary_rec.txt' % data_name, 'a+')
+    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_binary_rec.txt' % data_name, 'a+')
     f_input.write('Val #%d Loss %f AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
                   % (epoch, loss_mean, AUC_mean, AUC_std, f1_score_mean, f1_score_std,
                      precision_mean, precision_std, recall_mean, recall_std, current_time))
     f_input.close()
-    best_AUC = 0.
     if (epoch + 1) % 5 == 0:
         # =====================
         # 测试模型
@@ -339,7 +359,7 @@ for epoch in range(num_epochs):
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                   recall_std, best_AUC))
         # ==========
-        f_input = open('res/%s_MultiAggLP_norm_weipool_no_lossadd_losswei_lstm256_binary_rec.txt' % data_name, 'a+')
+        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_binary_rec.txt' % data_name, 'a+')
         f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                          recall_std, best_AUC, current_time))
