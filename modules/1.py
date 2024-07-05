@@ -16,7 +16,7 @@ import torch
 import numpy as np
 
 # 读取npy文件
-data = np.load('../data/UAV_data/RPGM_1000_2_4_edge_seq.npy', allow_pickle=True)
+data = np.load('../data/UAV_data/GM_2000_2_edge_seq.npy', allow_pickle=True)
 # data = np.load('../emb_Node2Vec/emb_Node2Vec_UAV_RPGM_360_r=300_dim=64.npy', allow_pickle=True)
 
 # 显示npy文件中的内容

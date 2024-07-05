@@ -4,6 +4,7 @@
 # @file : utils
 # @Project : IDEA
 
+import torch
 import numpy as np
 from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_score
 
@@ -28,6 +29,30 @@ def get_adj_wei(edges, num_nodes, max_wei):
         adj[dst, src] = wei
     for i in range(num_nodes):
         adj[i, i] = 0
+
+    return adj
+
+
+def get_adj_norm_wei_with_self_loop(edges, num_nodes, max_wei):
+    '''
+    Function to get (dense) weighted adjacency matrix according to edge list
+    :param edges: edge list
+    :param num_nodes: number of nodes
+    :param max_wei: maximum edge weight
+    :return: adj: adjacency matrix
+    '''
+    adj = np.zeros((num_nodes, num_nodes))
+    num_edges = len(edges)
+    for i in range(num_edges):
+        src = int(edges[i][0])
+        dst = int(edges[i][1])
+        wei = float(edges[i][2])
+        if wei > max_wei:
+            wei = max_wei
+        adj[src, dst] = wei / max_wei
+        adj[dst, src] = wei / max_wei
+    for i in range(num_nodes):
+        adj[i, i] = 0.5  # 权重范围为(0, 1]，自环权重设置为0.5试试
 
     return adj
 
@@ -117,6 +142,24 @@ def get_D_by_edge_index_and_weight(edge_index, edge_weight, num_nodes):
 
     # 社团内只有一个节点的特殊情况！！
     if len(edge_index[0]) == 0:
+        D[0, 0] = 1.
+
+    return D
+
+
+def get_D_by_edge_index_and_weight_tnr(edge_index, edge_weight, num_nodes):
+
+    D = torch.zeros((num_nodes, num_nodes))
+    # 使用edge_index和edge_weight更新D矩阵
+    for i in range(edge_index[0].shape[0]):
+        node1 = edge_index[0][i].item()
+        node2 = edge_index[1][i].item()
+        wei = edge_weight[i].item()
+        if node1 != node2:  # 不能考虑自环
+            D[node1, node1] += wei
+
+    # 处理社团内只有一个节点的特殊情况
+    if edge_index[0].shape[0] == 1:
         D[0, 0] = 1.
 
     return D

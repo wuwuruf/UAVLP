@@ -18,6 +18,7 @@ from utils_DySAT.preprocess import load_graphs, get_context_pairs, get_evaluatio
 from utils_DySAT.minibatch import MyDataset
 from utils_DySAT.utilities import to_device
 from utils_DySAT.model import DySAT
+from my_modules.utils import *
 
 import torch
 
@@ -59,8 +60,10 @@ if __name__ == "__main__":
     parser.add_argument('--time_steps', type=int, nargs='?', default=180,
                         help="total time steps used for train, eval and test")
     # Experimental settings.
-    parser.add_argument('--dataset', type=str, nargs='?', default='GM_2000',
+    parser.add_argument('--dataset', type=str, nargs='?', default='GM_2000_6',
                         help='dataset name')
+    parser.add_argument('--num_nodes', type=int, nargs='?', default=100,
+                        help='number of nodes')
     parser.add_argument('--GPU_ID', type=int, nargs='?', default=0,
                         help='GPU_ID (0/1 etc.)')
     parser.add_argument('--epochs', type=int, nargs='?', default=30,
@@ -116,18 +119,26 @@ if __name__ == "__main__":
     # ============================================
     # 构建graphs, adjs, feats列表
     edge_seq_list = np.load('data/UAV_data/%s_edge_seq.npy' % args.dataset, allow_pickle=True)
+    edge_seq_list = edge_seq_list[:180]
+    max_thres = 0  # Threshold for maximum edge weight
+    for i in range(len(edge_seq_list)):
+        for j in range(len(edge_seq_list[i])):
+            max_thres = max(edge_seq_list[i][j][2], max_thres)
     feat = np.load('data/UAV_data/%s_feat.npy' % args.dataset, allow_pickle=True)
-    # edge_seq_list = edge_seq_list[:180]
-    # feat = feat[:180]
-    data_name = 'GM_2000_180'
+    feat_list = []
+    for i in range(args.time_steps):
+        adj = get_adj_wei(edge_seq_list[i], args.num_nodes, max_thres)
+        feat_list.append(np.concatenate((feat, adj), axis=1))
+    data_name = 'GM_2000_6_180'
     graphs = []
     adjs = []
     feats = []
-    for edge_seq in edge_seq_list:
+    for j in range(len(edge_seq_list)):
+        edge_seq = edge_seq_list[j]
         # 创建一个新的无向图
         G = nx.Graph()
         # 添加节点特征
-        for i, f in enumerate(feat):
+        for i, f in enumerate(feat_list[j]):
             G.add_node(i, feature=f)
         # 添加边和权重
         for edge in edge_seq:

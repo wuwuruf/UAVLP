@@ -24,132 +24,132 @@ import copy
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# # class WeightedGAT(Module):
-# #     def __init__(self,
-# #                  input_dim,
-# #                  output_dim,
-# #                  n_heads,
-# #                  drop_rate):
-# #         super(WeightedGAT, self).__init__()
-# #         # 每个头的特征维度
-# #         self.out_dim = output_dim // n_heads
-# #         self.n_heads = n_heads
-# #         self.act = nn.ELU()
-# #
-# #         # 线性层对特征做线性变换（W*X），W维度为[143,128]
-# #         self.lin = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
-# #         # 定义α向量（将一个α向量拆成att_l和att_r）
-# #         # 通过nn.Parameter()函数创建的PyTorch可学习参数对象，维度为(1, n_heads, self.out_dim)
-# #         self.att_l = nn.Parameter(torch.Tensor(1, n_heads, self.out_dim))
-# #         self.att_r = nn.Parameter(torch.Tensor(1, n_heads, self.out_dim))
-# #
-# #         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
-# #
-# #         self.attn_drop = nn.Dropout(drop_rate)
-# #         self.ffd_drop = nn.Dropout(drop_rate)
-# #
-# #         # self.residual = residual
-# #         # if self.residual:
-# #         #     self.lin_residual = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
-# #
-# #         self.xavier_init()
-# #
-# #     # 返回GAT处理后的特征矩阵
-# #     def forward(self, edge_index, edge_weight, feat):
-# #         # # 深拷贝，防止在后续操作中修改原始数据
-# #         # graph = copy.deepcopy(graph)
-# #         # edge_index = graph.edge_index
-# #         edge_weight = edge_weight.reshape(-1, 1)
-# #         H, C = self.n_heads, self.out_dim  # 16, 8
-# #         # W*X，对特征做线性变换：e.g.第一张图[18, 143]*[143, 128]=>[18, 128]=>[18,16,8]
-# #         x = self.lin(feat).view(-1, H, C)  # [N, heads, out_dim]
-# #         # attention
-# #         alpha_l = (x * self.att_l).sum(dim=-1).squeeze()  # [N, heads]
-# #         alpha_r = (x * self.att_r).sum(dim=-1).squeeze()
-# #         alpha_l = alpha_l[edge_index[0]]  # [num_edges, heads]
-# #         alpha_r = alpha_r[edge_index[1]]
-# #         alpha = alpha_r + alpha_l
-# #         # [66, 16]：66条边，16个头对应的注意力权重
-# #         alpha = edge_weight * alpha
-# #         alpha = self.leaky_relu(alpha)
-# #         # 对注意力权重归一化
-# #         coefficients = softmax(alpha, edge_index[1])  # [num_edges, heads]
-# #
-# #         # dropout
-# #         if self.training:
-# #             # 对注意力权重和特征矩阵进行dropout
-# #             coefficients = self.attn_drop(coefficients)
-# #             x = self.ffd_drop(x)
-# #
-# #         # 取每条边出发节点的特征（edge_index[1]为终止节点）
-# #         x_j = x[edge_index[0]]  # [num_edges, heads, out_dim]
-# #
-# #         # output
-# #         # 函数：scatter(src, index, dim, reduce) 进行特征聚合
-# #         # 原理：根据index，将index相同值对应的src元素进行定义的运算，dim为在第几维运算
-# #         out = self.act(scatter(x_j * coefficients[:, :, None], edge_index[1], dim=0, reduce="sum"))
-# #         # 多头的拼接
-# #         out = out.reshape(-1, self.n_heads * self.out_dim)  # [num_nodes, output_dim]
-# #         # if self.residual:
-# #         #     out = out + self.lin_residual(feat)
-# #         # 最终的特征
-# #         feat = out
-# #
-# #         return feat
+class WeightedGAT(Module):
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 n_heads,
+                 drop_rate):
+        super(WeightedGAT, self).__init__()
+        # 每个头的特征维度
+        self.out_dim = output_dim // n_heads
+        self.n_heads = n_heads
+        self.act = nn.ELU()
+
+        # 线性层对特征做线性变换（W*X），W维度为[143,128]
+        self.lin = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
+        # 定义α向量（将一个α向量拆成att_l和att_r）
+        # 通过nn.Parameter()函数创建的PyTorch可学习参数对象，维度为(1, n_heads, self.out_dim)
+        self.att_l = nn.Parameter(torch.Tensor(1, n_heads, self.out_dim))
+        self.att_r = nn.Parameter(torch.Tensor(1, n_heads, self.out_dim))
+
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+
+        self.attn_drop = nn.Dropout(drop_rate)
+        self.ffd_drop = nn.Dropout(drop_rate)
+
+        # self.residual = residual
+        # if self.residual:
+        #     self.lin_residual = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
+
+        self.xavier_init()
+
+    # 返回GAT处理后的特征矩阵
+    def forward(self, edge_index, edge_weight, feat):
+        # # 深拷贝，防止在后续操作中修改原始数据
+        # graph = copy.deepcopy(graph)
+        # edge_index = graph.edge_index
+        edge_weight = edge_weight.reshape(-1, 1)
+        H, C = self.n_heads, self.out_dim  # 16, 8
+        # W*X，对特征做线性变换：e.g.第一张图[18, 143]*[143, 128]=>[18, 128]=>[18,16,8]
+        x = self.lin(feat).view(-1, H, C)  # [N, heads, out_dim]
+        # attention
+        alpha_l = (x * self.att_l).sum(dim=-1).squeeze()  # [N, heads]
+        alpha_r = (x * self.att_r).sum(dim=-1).squeeze()
+        alpha_l = alpha_l[edge_index[0]]  # [num_edges, heads]
+        alpha_r = alpha_r[edge_index[1]]
+        alpha = alpha_r + alpha_l
+        # [66, 16]：66条边，16个头对应的注意力权重
+        alpha = edge_weight * alpha
+        alpha = self.leaky_relu(alpha)
+        # 对注意力权重归一化
+        coefficients = softmax(alpha, edge_index[1])  # [num_edges, heads]
+
+        # dropout
+        if self.training:
+            # 对注意力权重和特征矩阵进行dropout
+            coefficients = self.attn_drop(coefficients)
+            x = self.ffd_drop(x)
+
+        # 取每条边出发节点的特征（edge_index[1]为终止节点）
+        x_j = x[edge_index[0]]  # [num_edges, heads, out_dim]
+
+        # output
+        # 函数：scatter(src, index, dim, reduce) 进行特征聚合
+        # 原理：根据index，将index相同值对应的src元素进行定义的运算，dim为在第几维运算
+        out = self.act(scatter(x_j * coefficients[:, :, None], edge_index[1], dim=0, reduce="sum"))
+        # 多头的拼接
+        out = out.reshape(-1, self.n_heads * self.out_dim)  # [num_nodes, output_dim]
+        # if self.residual:
+        #     out = out + self.lin_residual(feat)
+        # 最终的特征
+        feat = out
+
+        return feat
+
+    def xavier_init(self):
+        nn.init.xavier_uniform_(self.att_l)
+        nn.init.xavier_uniform_(self.att_r)
+
+# class WeightedGAT(Module):
+#     def __init__(self, input_dim, output_dim, n_heads, drop_rate):
+#         super(WeightedGAT, self).__init__()
+#         self.out_dim = output_dim // n_heads
+#         self.n_heads = n_heads
+#         self.act = nn.ELU()
+#         self.lin = nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
+#         self.att_l = nn.Parameter(torch.Tensor(1, n_heads, self.out_dim))
+#         self.att_r = nn.Parameter(torch.Tensor(1, n_heads, self.out_dim))
+#         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+#         self.attn_drop = nn.Dropout(drop_rate)
+#         self.ffd_drop = nn.Dropout(drop_rate)
+#         self.xavier_init()
+#
+#     def forward(self, edge_index, edge_weight, feat):
+#         edge_weight = edge_weight.reshape(-1, 1)
+#         H, C = self.n_heads, self.out_dim
+#         x = self.lin(feat).view(-1, H, C)
+#         alpha_l = (x * self.att_l).sum(dim=-1).squeeze()
+#         alpha_r = (x * self.att_r).sum(dim=-1).squeeze()
+#         alpha_l = alpha_l[edge_index[0]]
+#         alpha_r = alpha_r[edge_index[1]]
+#         alpha = alpha_r + alpha_l
+#         alpha = edge_weight * alpha
+#         alpha = self.leaky_relu(alpha)
+#         coefficients = softmax(alpha, edge_index[1])
+#
+#         if self.training:
+#             coefficients = self.attn_drop(coefficients)
+#             x = self.ffd_drop(x)
+#
+#         x_j = x[edge_index[0]]
+#         out = self.act(scatter(x_j * coefficients[:, :, None], edge_index[1], dim=0, reduce="sum"))
+#         out = out.reshape(-1, self.n_heads * self.out_dim)
+#
+#         # Ensure isolated nodes maintain their transformed features
+#         x = x.view(-1, self.n_heads * self.out_dim)
+#         mask = torch.zeros(feat.size(0), dtype=torch.bool, device=feat.device)
+#         mask[edge_index[0]] = True
+#         mask[edge_index[1]] = True
+#         final_feat = torch.zeros_like(x).view(-1, self.n_heads * self.out_dim)
+#         final_feat[mask] = out
+#         feat = torch.where(mask.unsqueeze(-1), final_feat, x)
+#
+#         return feat
 #
 #     def xavier_init(self):
 #         nn.init.xavier_uniform_(self.att_l)
 #         nn.init.xavier_uniform_(self.att_r)
-
-class WeightedGAT(Module):
-    def __init__(self, input_dim, output_dim, n_heads, drop_rate):
-        super(WeightedGAT, self).__init__()
-        self.out_dim = output_dim // n_heads
-        self.n_heads = n_heads
-        self.act = torch.nn.ELU()
-        self.lin = torch.nn.Linear(input_dim, n_heads * self.out_dim, bias=False)
-        self.att_l = Parameter(torch.Tensor(1, n_heads, self.out_dim))
-        self.att_r = Parameter(torch.Tensor(1, n_heads, self.out_dim))
-        self.leaky_relu = torch.nn.LeakyReLU(negative_slope=0.2)
-        self.attn_drop = torch.nn.Dropout(drop_rate)
-        self.ffd_drop = torch.nn.Dropout(drop_rate)
-        self.xavier_init()
-
-    def forward(self, edge_index, edge_weight, feat):
-        edge_weight = edge_weight.reshape(-1, 1)
-        H, C = self.n_heads, self.out_dim
-        x = self.lin(feat).view(-1, H, C)
-        alpha_l = (x * self.att_l).sum(dim=-1).squeeze()
-        alpha_r = (x * self.att_r).sum(dim=-1).squeeze()
-        alpha_l = alpha_l[edge_index[0]]
-        alpha_r = alpha_r[edge_index[1]]
-        alpha = alpha_r + alpha_l
-        alpha = edge_weight * alpha
-        alpha = self.leaky_relu(alpha)
-        coefficients = softmax(alpha, edge_index[1])
-
-        if self.training:
-            coefficients = self.attn_drop(coefficients)
-            x = self.ffd_drop(x)
-
-        x_j = x[edge_index[0]]
-        out = self.act(scatter(x_j * coefficients[:, :, None], edge_index[1], dim=0, reduce="sum"))
-        out = out.reshape(-1, self.n_heads * self.out_dim)
-
-        # 确保输出特征的行数与输入特征的行数一致
-        if out.size(0) != feat.size(0):
-            # 初始化输出特征为原始特征
-            full_out = feat.clone()
-            # 更新有邻居节点的特征
-            full_out[:out.size(0), :] = out
-        else:
-            full_out = out
-
-        return full_out
-
-    def xavier_init(self):
-        torch.nn.init.xavier_uniform_(self.att_l)
-        torch.nn.init.xavier_uniform_(self.att_r)
 
 class IGRU(Module):
     '''

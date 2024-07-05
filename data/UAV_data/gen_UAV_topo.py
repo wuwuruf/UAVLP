@@ -13,11 +13,11 @@ import math
 
 # 参数设置
 r = 1000  # 通信半径
-data_name = 'RPGM_1000_2_13'
+data_name = 'RPGM_1000_2_16'
 # ========================================
 # ========== 构建edge_seq===============
 # 读取csv文件
-df = pd.read_csv('RPGM_location_360s_13.csv')
+df = pd.read_csv('RPGM_location_360s_16.csv')
 df_SNR = pd.read_csv('snr_data.csv')
 
 edge_seq = []

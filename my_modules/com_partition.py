@@ -3,19 +3,21 @@
 # @Author : wfr
 # @file : com_partition
 # @Project : IDEA
-
+"""
+没什么大用，就是用来计算D_com
+"""
 import numpy as np
 import networkx as nx
 from community import community_louvain
 import datetime
 
 
-data_name = 'RPGM_1000_2'
+data_name = 'GM_2000_6'
 num_snaps = 180
-max_weight = 100
+num_nodes = 100
 # =================
 
-edge_seq_list = np.load('../data/UAV_data/%s_5_edge_seq.npy' % data_name, allow_pickle=True)
+edge_seq_list = np.load('../data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
 edge_seq_list = edge_seq_list[0:180]
 # 转成合适的格式
 edge_index_list = []
@@ -32,14 +34,7 @@ for i in range(num_snaps):
     # edge_weight_tnr = torch.FloatTensor(edge_weight).to(device)
     edge_index_list.append(edge_index)
     edge_weight_list.append(edge_weight)
-# ===================
-# feat = np.load('../data/UAV_data_interval=5/%s_feat.npy' % data_name, allow_pickle=True)
-feat = np.load('../data/UAV_data/%s_5_feat.npy' % data_name, allow_pickle=True)
-
-feat_list = []
-for i in range(num_snaps):
-    feat_list.append(feat)
-data_name = 'RPGM_1000_2_180'
+data_name = 'GM_2000_6_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []
@@ -47,8 +42,8 @@ for edge_seq in edge_seq_list:
     # 创建一个新的无向图
     G = nx.Graph()
     # 添加节点特征
-    for i, f in enumerate(feat):
-        G.add_node(i, feature=f)
+    for i in range(num_nodes):
+        G.add_node(i)
     # 添加边和权重
     for edge in edge_seq:
         node1, node2, weight = edge

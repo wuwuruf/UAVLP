@@ -14,6 +14,18 @@ from utils import *
 import scipy.sparse
 import random
 import datetime
+import torch
+import pickle
+from my_modules.utils import *
+from my_modules.loss import *
+import scipy.sparse
+import random
+import numpy as np
+import networkx as nx
+import torch_geometric as tg
+from torch_geometric.data import Data
+import scipy.sparse as sp
+from community import community_louvain
 
 device = torch.device('cuda')
 
@@ -33,23 +45,18 @@ train_epochs = 30
 num_snaps = 180
 emb_dim = 128
 
-edge_seq = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
-edge_seq = edge_seq[0:180]
+edge_seq_list = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
+edge_seq_list = edge_seq_list[0:180]
 data_name = 'GM_2000_2_180'
+
 # ===========================================================
 # 学习除了最后一个快照的嵌入
 emb_list = []
 for i in range(num_snaps - 1):
-    # 去掉edge_seq中的边权重，并转为适合输入Node2Vec模型的格式
-    edge_index = [[], []]
-    for edge in edge_seq[i]:
-        edge_index[0].append(edge[0])
-        edge_index[1].append(edge[1])
-        edge_index[0].append(edge[1])
-        edge_index[1].append(edge[0])
-
-    edge_index = torch.LongTensor(edge_index)
-
+    edge_seq = edge_seq_list[i]
+    adj = get_adj_no_wei(edge_seq, num_nodes)
+    adj_sp = sp.coo_matrix(adj, dtype=np.float32)
+    edge_index, _ = tg.utils.from_scipy_sparse_matrix(adj_sp)
     model = Node2Vec(edge_index,
                      embedding_dim=emb_dim,
                      walk_length=40,
@@ -74,13 +81,14 @@ for i in range(num_snaps - 1):
             optimizer.step()
             # total_loss += loss.item()
             # total_loss = total_loss / len(loader)
-        if emb_epoch == train_epochs-1:
+        if emb_epoch == train_epochs - 1:
             print('TimeStep-%d-Emb done' % i)
 
+    model.eval()
     emb = model()
     emb = emb.cpu().data.numpy()  # 转为numpy类型
     emb_list.append(emb)
 
 # 保存嵌入
 # 含num_snaps - 1数量的快照嵌入，不包含最后一张快照的嵌入
-np.save('emb_Node2Vec/emb_Node2Vec_%s_dim=128.npy' % data_name, np.array(emb_list))
+np.save('emb_Node2Vec/emb_Node2Vec_1_%s_dim=128.npy' % data_name, np.array(emb_list))

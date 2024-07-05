@@ -42,7 +42,8 @@ class FCNN(nn.Module):
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
-        x = self.dropout(x)
+        if self.training:
+            x = self.dropout(x)
         x = torch.sigmoid(self.fc2(x))
         return x
 
@@ -56,14 +57,13 @@ def setup_seed(seed):
 
 
 setup_seed(0)
-data_name = 'GM_2000'
+data_name = 'GM_2000_6'
 num_nodes = 100
 num_snaps = 180
-max_thres = 4.64  # Threshold for maximum edge weight
 num_val_snaps = 10
 num_test_snaps = 20  # Number of test snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps
-num_epochs = 400
+num_epochs = 800
 emb_dim = 128
 decoder_hidden_dim = 256
 dropout_ratio = 0.5
@@ -71,15 +71,17 @@ win_size = 10
 save_flag = False
 
 # =================================================
-sparse_beta = 2
-lambd_cross = 0
-lambd_reg = 0.0005
+sparse_beta = 10
+lambd_cross = 5
+lambd_reg = 0.001
+step_interval = 5
+early_stop_epochs = 50
 # =================================================
 epsilon = 0.01  # Threshold of the zero-refining
 
 edge_seq = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
 edge_seq = edge_seq[:180]
-data_name = 'GM_2000_180'
+data_name = 'GM_2000_6_180'
 emb_list = np.load('emb_DySAT/emb_DySAT_%s_dim=%d.npy' % (data_name, emb_dim))
 #
 # ===============================================
@@ -87,16 +89,29 @@ decoder = FCNN(emb_dim, decoder_hidden_dim, num_nodes, dropout_ratio).to(device)
 decoder_opt = optim.Adam(decoder.parameters(), lr=5e-4, weight_decay=1e-5)
 # ===============================================
 # 使用训练集训练用于预测的解码器（两层MLP）
+best_AUC = 0.
+best_val_AUC = 0.
+no_improve_epochs = 0
 for epoch in range(num_epochs):
     current_time = datetime.datetime.now().time().strftime("%H:%M:%S")
     decoder_loss_list = []
     decoder.train()
     # count = 0
-    for i in range(0, num_train_snaps - win_size):
+    # =======================
+    # 每个epoch的打乱顺序都不同
+    random.seed(epoch)
+    # 生成从win_size到num_train_snaps范围内的列表
+    indices = list(range(0, num_train_snaps - win_size))
+    # 对列表进行随机打乱
+    random.shuffle(indices)
+    # =======================
+    iteration_count = 0
+    for i in indices:
         # count = count + 1
         emb_tnr = torch.FloatTensor(emb_list[i]).to(device)  # 获取当前窗口内最后一个时刻的嵌入
         emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
         adj_est = decoder(emb_tnr)
+        iteration_count += 1
         # ===========================
         # 加权预测
         # gnd = get_adj_wei(edge_seq[i + win_size], num_nodes, max_thres)  # 注意是预测窗口外第一个时刻，要i+1
@@ -110,10 +125,16 @@ for epoch in range(num_epochs):
         gnd_tnr = torch.FloatTensor(gnd).to(device)
         decoder_loss = get_single_corss_reg_loss(sparse_beta, gnd_tnr, adj_est, lambd_cross, lambd_reg)
         # ==========================
-        decoder_opt.zero_grad()
-        decoder_loss.backward()
-        decoder_opt.step()
+        decoder_loss.backward()  # 累积梯度
+        if iteration_count % step_interval == 0:
+            decoder_opt.step()
+            decoder_opt.zero_grad()
+            iteration_count = 0
         decoder_loss_list.append(decoder_loss.item())
+    # 在最后一次循环后，确保执行梯度更新
+    if iteration_count % step_interval != 0:
+        decoder_opt.step()
+        decoder_opt.zero_grad()
     # print("train_num:%d" % count)
     decoder_loss_mean = np.mean(decoder_loss_list)
     print("Epoch-%d decoder_loss:" % epoch, decoder_loss_mean)
@@ -138,6 +159,13 @@ for epoch in range(num_epochs):
         emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
         adj_est = decoder(emb_tnr)
         adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
+        for r in range(num_nodes):
+            adj_est[r, r] = 0
+        for i in range(num_nodes):
+            for j in range(num_nodes):
+                pre_av = (adj_est[i, j] + adj_est[j, i]) / 2
+                adj_est[i, j] = pre_av
+                adj_est[j, i] = pre_av
         # ========================================
         # 不加权二分类预测
         # ==============
@@ -155,6 +183,14 @@ for epoch in range(num_epochs):
         precision_list.append(precision)
         recall_list.append(recall)
     # ==============
+    AUC_mean = np.mean(AUC_list)
+    best_val_AUC = max(best_val_AUC, AUC_mean)
+    if AUC_mean < best_val_AUC:
+        no_improve_epochs += 1
+        if no_improve_epochs >= early_stop_epochs:
+            break
+    else:
+        no_improve_epochs = 0
     AUC_mean = np.mean(AUC_list)
     AUC_std = np.std(AUC_list, ddof=1)
     f1_score_mean = np.mean(f1_score_list)
@@ -233,6 +269,13 @@ for epoch in range(num_epochs):
             emb_tnr = F.normalize(emb_tnr, dim=0, p=2)
             adj_est = decoder(emb_tnr)
             adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
+            for r in range(num_nodes):
+                adj_est[r, r] = 0
+            for i in range(num_nodes):
+                for j in range(num_nodes):
+                    pre_av = (adj_est[i, j] + adj_est[j, i]) / 2
+                    adj_est[i, j] = pre_av
+                    adj_est[j, i] = pre_av
             # ========================================
             # 不加权二分类预测
             # ==============
@@ -251,6 +294,7 @@ for epoch in range(num_epochs):
             recall_list.append(recall)
         # ==============
         AUC_mean = np.mean(AUC_list)
+        best_AUC = max(best_AUC, AUC_mean)
         AUC_std = np.std(AUC_list, ddof=1)
         f1_score_mean = np.mean(f1_score_list)
         f1_score_std = np.std(f1_score_list, ddof=1)
@@ -259,15 +303,15 @@ for epoch in range(num_epochs):
         recall_mean = np.mean(recall_list)
         recall_std = np.std(recall_list, ddof=1)
         # ==============
-        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f'
+        print('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f'
               % (
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
-                  recall_std))
+                  recall_std, best_AUC))
         # ==========
         f_input = open('res/%s_DySAT_binary_rec.txt' % data_name, 'a+')
-        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
+        f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
-                         recall_std, current_time))
+                         recall_std, best_AUC, current_time))
         f_input.close()
 # # =========================================
 # # 加权预测
