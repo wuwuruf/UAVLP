@@ -12,7 +12,7 @@ from community import community_louvain
 import datetime
 
 
-data_name = 'GM_2000_6'
+data_name = 'GM_2000_4'
 num_snaps = 180
 num_nodes = 100
 # =================
@@ -34,7 +34,7 @@ for i in range(num_snaps):
     # edge_weight_tnr = torch.FloatTensor(edge_weight).to(device)
     edge_index_list.append(edge_index)
     edge_weight_list.append(edge_weight)
-data_name = 'GM_2000_6_180'
+data_name = 'GM_2000_4_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []

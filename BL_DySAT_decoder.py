@@ -159,13 +159,13 @@ for epoch in range(num_epochs):
         emb_tnr = F.normalize(emb_tnr, dim=0, p=2)  # 对嵌入矩阵列向量进行标准化
         adj_est = decoder(emb_tnr)
         adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
-        for r in range(num_nodes):
-            adj_est[r, r] = 0
-        for i in range(num_nodes):
-            for j in range(num_nodes):
-                pre_av = (adj_est[i, j] + adj_est[j, i]) / 2
-                adj_est[i, j] = pre_av
-                adj_est[j, i] = pre_av
+        # for r in range(num_nodes):
+        #     adj_est[r, r] = 0
+        # for i in range(num_nodes):
+        #     for j in range(num_nodes):
+        #         pre_av = (adj_est[i, j] + adj_est[j, i]) / 2
+        #         adj_est[i, j] = pre_av
+        #         adj_est[j, i] = pre_av
         # ========================================
         # 不加权二分类预测
         # ==============
@@ -262,20 +262,20 @@ for epoch in range(num_epochs):
         recall_list = []
         current_time = datetime.datetime.now().time().strftime("%H:%M:%S")
         # count = 0
-        for i in range(num_snaps - num_test_snaps - win_size, num_snaps - 1 - win_size):
+        for i in range(num_snaps - num_test_snaps - win_size, num_snaps - win_size):
             # count = count + 1
             # Get and refine the prediction result
             emb_tnr = torch.FloatTensor(emb_list[i]).to(device)
             emb_tnr = F.normalize(emb_tnr, dim=0, p=2)
             adj_est = decoder(emb_tnr)
             adj_est = adj_est.cpu().data.numpy()  # 张量转为numpy类型
-            for r in range(num_nodes):
-                adj_est[r, r] = 0
-            for i in range(num_nodes):
-                for j in range(num_nodes):
-                    pre_av = (adj_est[i, j] + adj_est[j, i]) / 2
-                    adj_est[i, j] = pre_av
-                    adj_est[j, i] = pre_av
+            # for r in range(num_nodes):
+            #     adj_est[r, r] = 0
+            # for i in range(num_nodes):
+            #     for j in range(num_nodes):
+            #         pre_av = (adj_est[i, j] + adj_est[j, i]) / 2
+            #         adj_est[i, j] = pre_av
+            #         adj_est[j, i] = pre_av
             # ========================================
             # 不加权二分类预测
             # ==============

@@ -201,5 +201,5 @@ if __name__ == "__main__":
             emb = model(feed_dict['graphs'][t + 1 - args.window: t + 1])[:, -1, :].detach().cpu().numpy()
             emb_list.append(emb)
 
-    # 只包含了下标为[window - 1, time_steps - 2]的嵌入，用来预测下标为[window, time_steps - 1]的链路，嵌入矩阵数量为num_snaps - win_size
+    # 只包含了时刻下标为[window - 1, time_steps - 2]的嵌入，用来预测时刻下标为[window, time_steps - 1]的链路，嵌入矩阵数量为num_snaps - win_size
     np.save('emb_DySAT/emb_DySAT_%s_dim=128.npy' % data_name, np.array(emb_list))

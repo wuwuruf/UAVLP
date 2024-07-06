@@ -55,6 +55,43 @@ def get_corss_reg_loss(beta, gnd_list, pred_adj_list, theta, lambda_cross_entrop
     return loss
 
 
+def get_corss_reg_rep_loss(beta, gnd_list, pred_adj_list, node_embeddings_list, theta, lambda_cross_entropy=20,
+                           lambda_reg=0.0005,
+                           lambda_rep_diff=0.005):
+    """
+    获取适应稀疏情况的不加权重构误差，交叉熵损失和1范数正则化
+    """
+    loss = 0.0
+    win_size = len(pred_adj_list)
+    for i in range(win_size):
+        gnd = gnd_list[i]
+        pred_adj = pred_adj_list[i]
+        node_embeddings = node_embeddings_list[i]
+        decay = (1 - theta) ** (win_size - i - 1)  # Decaying factor
+
+        # 计算原始的加权重构误差
+        weight = gnd * (beta - 1) + 1
+        reconstruction_loss = torch.mean(torch.sum(weight * torch.square(gnd - pred_adj), dim=1), dim=-1)
+
+        # 计算交叉熵损失
+        cross_entropy_loss = lambda_cross_entropy * F.binary_cross_entropy(pred_adj, gnd)
+
+        # 计算1范数正则化项
+        l1_regularization = lambda_reg * torch.sum(torch.abs(pred_adj))
+
+        # 计算有连接节点之间的表示差异误差
+        node_emb_norm = torch.norm(node_embeddings, dim=1, keepdim=True)
+        normalized_emb = node_embeddings / node_emb_norm
+        sim_matrix = torch.mm(normalized_emb, normalized_emb.t())
+        rep_diff_loss = lambda_rep_diff * torch.sum((1 - sim_matrix) * gnd)
+
+        # 总损失
+        total_loss = decay * (reconstruction_loss + cross_entropy_loss + l1_regularization + rep_diff_loss)
+
+        loss += total_loss
+    return loss
+
+
 def get_single_refined_loss(beta, gnd, pred_adj):
     """
     获取适应稀疏情况的不加权重构误差

@@ -8,7 +8,7 @@ import torch
 import pickle
 import torch.optim as optim
 import torch_geometric as tg
-from my_modules.model_new_GAT import MultiAggLP
+from my_modules.model_no_agg import MultiAggLP
 from my_modules.utils import *
 from my_modules.loss import *
 import scipy.sparse

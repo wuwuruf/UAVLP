@@ -8,7 +8,7 @@ import torch
 import pickle
 import torch.optim as optim
 import torch_geometric as tg
-from my_modules.model_new_GAT import MultiAggLP
+from my_modules.model_no_micro import MultiAggLP
 from my_modules.utils import *
 from my_modules.loss import *
 import scipy.sparse
@@ -34,7 +34,7 @@ def setup_seed(seed):
 
 setup_seed(0)
 
-data_name = 'GM_2000_6'
+data_name = 'GM_2000_4'
 num_nodes = 100  # Number of nodes
 num_snaps = 180  # Number of snapshots
 max_thres = 100  # Threshold for maximum edge weight
@@ -45,7 +45,7 @@ pooling_ratio = 0.8
 agg_feat_dim = GAT_output_dim
 RNN_dims = [agg_feat_dim, 256, 256]  # 两层GRU的维度
 decoder_dims = [RNN_dims[-1], 256, num_nodes]  # 解码器两层全连接的维度
-save_flag = True
+save_flag = False
 
 # =================
 dropout_rate = 0.5  # Dropout rate
@@ -58,7 +58,7 @@ num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of traini
 n_heads = 8
 # =================
 step_interval = 5
-early_stop_epochs = 70
+early_stop_epochs = 100
 # =================
 # loss的超参数
 lambd_cross = 5
@@ -88,7 +88,7 @@ for i in range(num_snaps):
     feat_list.append(feat)
 
 # ================
-data_name = 'GM_2000_6_180'
+data_name = 'GM_2000_4_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []
@@ -114,7 +114,8 @@ for G in graphs:
 
 # ==================
 edge_index_com_list_list = np.load('com_list_list/%s_edge_index_com_list_list.npy' % data_name, allow_pickle=True)
-edge_weight_com_list_list = np.load('com_list_list/%s_edge_weight_com_list_list.npy' % data_name, allow_pickle=True)
+edge_weight_com_list_list = np.load('com_list_list/%s_edge_weight_com_list_list.npy' % data_name,
+                                    allow_pickle=True)
 D_com_list_list = []
 for i in range(len(edge_index_com_list_list)):
     D_com_list = []
@@ -132,7 +133,7 @@ for i in range(len(edge_index_com_list_list)):
 # ==================
 # 定义模型和优化器
 model = MultiAggLP(micro_dims, agg_feat_dim, RNN_dims, decoder_dims, n_heads, dropout_rate).to(device)
-opt = optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-4)
+opt = optim.Adam(model.parameters(), lr=5e-4, weight_decay=5e-4)
 
 # ==================
 best_AUC = 0.
@@ -200,7 +201,7 @@ for epoch in range(num_epochs):
     print('Epoch#%d Train G-Loss %f' % (epoch, loss_mean))
 
     if save_flag:
-        torch.save(model, 'my_pt/MultiAggLP_newGAT_%s_%d.pkl' % (data_name, epoch))
+        torch.save(model, 'my_pt/MultiAggLP_newGAT_%d.pkl' % epoch)
     # =====================
     # 验证模型
     model.eval()
@@ -275,7 +276,7 @@ for epoch in range(num_epochs):
           % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
              recall_std))
     # ==========
-    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_newGAT_binary_rec.txt' % data_name, 'a+')
+    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_newGAT_no_micro_binary_rec.txt' % data_name, 'a+')
     f_input.write('Val #%d Loss %f AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
                   % (epoch, loss_mean, AUC_mean, AUC_std, f1_score_mean, f1_score_std,
                      precision_mean, precision_std, recall_mean, recall_std, current_time))
@@ -352,7 +353,7 @@ for epoch in range(num_epochs):
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                   recall_std, best_AUC))
         # ==========
-        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_newGAT_binary_rec.txt' % data_name, 'a+')
+        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_newGAT_no_micro_binary_rec.txt' % data_name, 'a+')
         f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                          recall_std, best_AUC, current_time))

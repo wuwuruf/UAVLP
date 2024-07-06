@@ -7,7 +7,7 @@
 import torch
 import torch.optim as optim
 import torch_geometric as tg
-from my_modules.model_IDEA import MultiAggLP
+from my_modules.model_concat import MultiAggLP
 from my_modules.utils import *
 from my_modules.loss import *
 import scipy.sparse

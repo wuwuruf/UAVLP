@@ -5,9 +5,10 @@
 # @Project : IDEA
 
 import torch
+import pickle
 import torch.optim as optim
 import torch_geometric as tg
-from my_modules.model_wei_pool import MultiAggLP
+from my_modules.model_no_meso import MultiAggLP
 from my_modules.utils import *
 from my_modules.loss import *
 import scipy.sparse
@@ -55,8 +56,9 @@ num_test_snaps = 20  # Number of test snapshots  约7:3划分训练集与测试�
 num_val_snaps = 10  # Number of validation snapshots
 num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of training snapshots
 n_heads = 8
-
+# =================
 step_interval = 5
+early_stop_epochs = 100
 # =================
 # loss的超参数
 lambd_cross = 5
@@ -67,32 +69,25 @@ sparse_beta = 10
 # =================
 edge_seq_list = np.load('data/UAV_data/%s_edge_seq.npy' % data_name, allow_pickle=True)
 edge_seq_list = edge_seq_list[0:180]
-# # 转成合适的格式
+# =================
+with open('pyg_graphs/%s_pyg_graphs.pkl' % data_name, 'rb') as f:
+    pyg_graphs = pickle.load(f)
+D_list = []  # 计算时不考虑自环，这里度是用于加权池化的
 edge_index_list = []
 edge_weight_list = []
-D_list = []
-for i in range(num_snaps):
-    # 去掉edge_seq中的边权重，并转为适合输入Node2Vec模型的格式
-    edge_index = [[], []]
-    edge_weight = []
-    for edge in edge_seq_list[i]:  # 每条边代表的是无向边！！不存在重复
-        edge_index[0].append(edge[0])
-        edge_index[1].append(edge[1])
-        edge_weight.append(edge[2])  # 输入GAT前权重归一化
-    D = get_D_by_edge_index_and_weight(edge_index, edge_weight, num_nodes)
-    D_tnr = torch.FloatTensor(D).to(device)
-    edge_index_tnr = torch.LongTensor(edge_index).to(device)
-    edge_weight_tnr = torch.FloatTensor(edge_weight).to(device)
-    edge_index_list.append(edge_index_tnr)
-    edge_weight_list.append(edge_weight_tnr)
-    D_list.append(D_tnr)
-feat = np.load('data/UAV_data/%s_feat.npy' % data_name, allow_pickle=True)
-feat_tnr = torch.FloatTensor(feat).to(device)  # 放到GPU上
 feat_list = []
 for i in range(num_snaps):
-    adj = get_adj_wei(edge_seq_list[i], num_nodes, max_thres)
-    adj_tnr = torch.FloatTensor(adj).to(device)
-    feat_list.append(torch.cat([feat_tnr, adj_tnr], dim=1))
+    pyg_graph = pyg_graphs[i].to(device)
+    edge_index = pyg_graph.edge_index
+    edge_weight = pyg_graph.edge_weight
+    feat = pyg_graph.x
+    D = get_D_by_edge_index_and_weight_tnr(pyg_graph.edge_index, pyg_graph.edge_weight, num_nodes).to(device)
+    D_list.append(D)
+    edge_index_list.append(edge_index)
+    edge_weight_list.append(edge_weight)
+    feat_list.append(feat)
+
+# ================
 data_name = 'GM_2000_4_180'
 # ==================
 # 创建nx格式的图列表
@@ -100,9 +95,9 @@ graphs = []
 for edge_seq in edge_seq_list:
     # 创建一个新的无向图
     G = nx.Graph()
-    # 添加节点特征
-    for i, f in enumerate(feat):
-        G.add_node(i, feature=f)
+    # 添加节点
+    for i in range(num_nodes):
+        G.add_node(i)
     # 添加边和权重
     for edge in edge_seq:
         node1, node2, weight = edge
@@ -206,7 +201,7 @@ for epoch in range(num_epochs):
     print('Epoch#%d Train G-Loss %f' % (epoch, loss_mean))
 
     if save_flag:
-        torch.save(model, 'my_pt/MultiAggLP_weipool_lossadd_lossadd_%d.pkl' % epoch)
+        torch.save(model, 'my_pt/MultiAggLP_newGAT_%d.pkl' % epoch)
     # =====================
     # 验证模型
     model.eval()
@@ -281,7 +276,7 @@ for epoch in range(num_epochs):
           % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
              recall_std))
     # ==========
-    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_binary_rec.txt' % data_name, 'a+')
+    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_newGAT_agggg_binary_rec.txt' % data_name, 'a+')
     f_input.write('Val #%d Loss %f AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
                   % (epoch, loss_mean, AUC_mean, AUC_std, f1_score_mean, f1_score_std,
                      precision_mean, precision_std, recall_mean, recall_std, current_time))
@@ -358,7 +353,7 @@ for epoch in range(num_epochs):
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                   recall_std, best_AUC))
         # ==========
-        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_binary_rec.txt' % data_name, 'a+')
+        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_newGAT_agggg_binary_rec.txt' % data_name, 'a+')
         f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                          recall_std, best_AUC, current_time))

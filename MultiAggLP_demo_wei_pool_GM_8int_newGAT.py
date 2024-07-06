@@ -58,7 +58,7 @@ num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of traini
 n_heads = 8
 # =================
 step_interval = 5
-early_stop_epochs = 100
+early_stop_epochs = 70
 # =================
 # loss的超参数
 lambd_cross = 5
@@ -133,7 +133,7 @@ for i in range(len(edge_index_com_list_list)):
 # ==================
 # 定义模型和优化器
 model = MultiAggLP(micro_dims, agg_feat_dim, RNN_dims, decoder_dims, n_heads, dropout_rate).to(device)
-opt = optim.Adam(model.parameters(), lr=5e-4, weight_decay=5e-4)
+opt = optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-4)
 
 # ==================
 best_AUC = 0.
