@@ -50,11 +50,14 @@ class MultiAggLP(Module):
                 WeightedGAT(input_dim=self.micro_dims[l], output_dim=self.micro_dims[l + 1], n_heads=self.n_heads,
                             drop_rate=self.dropout_rate))
         # ==================
+        # 学习宏观池化表示
+        self.macro_pooling_layers = WeiPool_noW()
+        # ==================
         # 学习介观池化表示
         self.meso_pooling_layers = WeiPool_noW()
         # ==================
         # 获取注意力融合表示
-        self.agg_layers = AttMultiAgg_concat_no_macro()
+        self.agg_layers = AttMultiAgg_noW(self.micro_dims[-1], self.agg_feat_dim, self.dropout_rate)
         # ==================
         # 学习时序信息  先用两层LSTM试试！！！
 
@@ -114,10 +117,18 @@ class MultiAggLP(Module):
                 output_meso_feat[cur_com_nodes_list] = output_meso_com_feat  # 将介观特征矩阵的对应当前社团的行直接赋值为当前社团池化特征
             output_meso_feat_list.append(output_meso_feat)
         # =======================
+        # 宏观池化获取宏观表示矩阵的列表
+        output_macro_feat_list = []
+        for t in range(win_size):
+            output_macro_feat = self.macro_pooling_layers(output_micro_feat_list[t], D_list[t])
+            output_macro_feat = output_macro_feat.expand(num_nodes, -1)  # 扩充列数使其形状与微观表示矩阵相同
+            output_macro_feat_list.append(output_macro_feat)
+        # =======================
         # 对多尺度表示进行融合，获取多尺度表示矩阵的列表
         output_agg_feat_list = []
         for t in range(win_size):
-            output_agg_feat = self.agg_layers(output_micro_feat_list[t], output_meso_feat_list[t])
+            output_agg_feat = self.agg_layers(output_micro_feat_list[t], output_meso_feat_list[t],
+                                              output_macro_feat_list[t])
             output_agg_feat_list.append(output_agg_feat)
         # ======================
         # 学习多尺度表示中的时序特征

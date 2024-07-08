@@ -6,6 +6,8 @@
 import torch
 import torch.nn.functional as F
 
+device = torch.device('cuda')
+
 
 def get_refined_loss(beta, gnd_list, pred_adj_list, theta):
     """
@@ -52,6 +54,66 @@ def get_corss_reg_loss(beta, gnd_list, pred_adj_list, theta, lambda_cross_entrop
         total_loss = decay * (reconstruction_loss + cross_entropy_loss + l1_regularization)
 
         loss += total_loss
+    return loss
+
+
+def get_emb_loss(node_embeddings, adjacency_matrix, lambda2=0.1, lambda3=0.01):
+    # 一阶邻居
+    A = adjacency_matrix
+    # 二阶邻居
+    A2 = torch.matmul(A, A)
+    A2[A2 > 0] = 1  # 将非零元素置为1
+    A2 = A2 - torch.diag(torch.diag(A2))  # 去掉对角线元素
+    A2 = A2 - A  # 去掉一阶邻居的影响
+
+    # 三阶邻居
+    A3 = torch.matmul(A2, A)
+    A3[A3 > 0] = 1  # 将非零元素置为1
+    A3 = A3 - torch.diag(torch.diag(A3))  # 去掉对角线元素
+    A3 = A3 - A  # 去掉一阶邻居的影响
+    A3 = A3 - A2  # 去掉二阶邻居的影响
+
+    # 计算一阶邻居的损失
+    pos_loss_1 = torch.sum(A * torch.sum((node_embeddings.unsqueeze(0) - node_embeddings.unsqueeze(1)) ** 2, dim=-1))
+
+    # 计算二阶邻居的损失
+    pos_loss_2 = torch.sum(A2 * torch.sum((node_embeddings.unsqueeze(0) - node_embeddings.unsqueeze(1)) ** 2, dim=-1))
+
+    # 计算三阶邻居的损失
+    pos_loss_3 = torch.sum(A3 * torch.sum((node_embeddings.unsqueeze(0) - node_embeddings.unsqueeze(1)) ** 2, dim=-1))
+
+    # 负采样，确保不相连节点的表示具有较大的差异
+    num_nodes = adjacency_matrix.shape[0]
+    neg_samples = torch.randint(0, num_nodes, (num_nodes, num_nodes))
+    neg_samples = (neg_samples != torch.arange(num_nodes).unsqueeze(1)).float().to(device)
+
+    neg_loss = torch.sum(
+        neg_samples * torch.sum((node_embeddings.unsqueeze(0) - node_embeddings.unsqueeze(1)) ** 2, dim=-1))
+
+    # 总损失
+    loss = pos_loss_1 + lambda2 * pos_loss_2 + lambda3 * pos_loss_3 + neg_loss
+
+    return loss
+
+
+def get_wei_emb_loss(node_embeddings, adjacency_matrix_wei):
+    # 一阶邻居
+    A = adjacency_matrix_wei
+
+    # 计算一阶邻居的损失
+    pos_loss_1 = torch.sum(A * torch.sum((node_embeddings.unsqueeze(0) - node_embeddings.unsqueeze(1)) ** 2, dim=-1))
+
+    # 负采样，确保不相连节点的表示具有较大的差异
+    num_nodes = adjacency_matrix_wei.shape[0]
+    neg_samples = torch.randint(0, num_nodes, (num_nodes, num_nodes))
+    neg_samples = (neg_samples != torch.arange(num_nodes).unsqueeze(1)).float().to(device)
+
+    neg_loss = torch.sum(
+        neg_samples * torch.sum((node_embeddings.unsqueeze(0) - node_embeddings.unsqueeze(1)) ** 2, dim=-1))
+
+    # 总损失
+    loss = pos_loss_1 + neg_loss
+
     return loss
 
 

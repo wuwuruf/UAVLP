@@ -58,7 +58,7 @@ num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of traini
 n_heads = 8
 # =================
 step_interval = 5
-early_stop_epochs = 100
+early_stop_epochs = 70
 # =================
 # loss的超参数
 lambd_cross = 5

@@ -582,6 +582,108 @@ class AttMultiAgg_new(Module):
         return x
 
 
+class AttMultiAgg_noW(Module):
+    """
+    对三个尺度的表示进行注意力聚合
+    （没用dropout，先看效果）
+    """
+
+    def __init__(self, input_dim, output_dim, dropout_ratio):
+        """
+        :param input_dim: 等于层次池化层的输出维度，即hidden_dim*2
+        :param output_dim:
+        """
+        super(AttMultiAgg_noW, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim  # 注：此处output_dim == input_dim
+        self.attention = nn.Linear(self.input_dim * 2, self.output_dim, bias=False)
+        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+        self.dropout_layer = nn.Dropout(dropout_ratio)
+        # nn.init.xavier_normal_(self.attention.weight)
+
+    def forward(self, micro_x, meso_x, macro_x):
+        micro_micro_x = torch.cat([micro_x, micro_x], dim=1)  # 沿着列拼接，[节点数, input_dim*2]
+        micro_meso_x = torch.cat([micro_x, meso_x], dim=1)
+        micro_macro_x = torch.cat([micro_x, macro_x], dim=1)
+        # =====================
+        micro_micro_score = F.softmax(self.leaky_relu(self.attention(micro_micro_x)),
+                                      dim=1)  # [节点数, output_dim]
+        micro_meso_score = F.softmax(self.leaky_relu(self.attention(micro_meso_x)),
+                                     dim=1)
+        micro_macro_score = F.softmax(self.leaky_relu(self.attention(micro_macro_x)),
+                                      dim=1)
+        # =====================
+        micro_x = micro_micro_score * micro_x
+        meso_x = micro_meso_score * meso_x
+        macro_x = micro_macro_score * macro_x
+
+        x = micro_x + meso_x + macro_x
+
+        if self.training:
+            x = self.dropout_layer(x)
+
+        return x
+
+
+class AttMultiAgg_self_att(nn.Module):
+    def __init__(self, input_dim, num_heads=8, dropout_ratio=0.5):
+        super(AttMultiAgg_self_att, self).__init__()
+        self.num_heads = num_heads
+        self.input_dim = input_dim
+        self.dropout_ratio = dropout_ratio
+
+        self.attention = nn.MultiheadAttention(input_dim, num_heads)
+        self.dropout = nn.Dropout(dropout_ratio)
+        self.layer_norm = nn.LayerNorm(input_dim * 3)
+
+    def forward(self, micro_x, meso_x, macro_x):
+        all_x = torch.cat((micro_x.unsqueeze(0), meso_x.unsqueeze(0), macro_x.unsqueeze(0)), dim=0)
+
+        attn_output, _ = self.attention(all_x, all_x, all_x)
+        attn_output = self.dropout(attn_output)
+
+        micro_attn_x, meso_attn_x, macro_attn_x = torch.chunk(attn_output, 3, dim=0)
+
+        # x = (micro_attn_x + meso_attn_x + macro_attn_x) / 3
+        x = torch.cat([micro_attn_x.squeeze(0), meso_attn_x.squeeze(0), macro_attn_x.squeeze(0)], dim=1)
+        x = self.dropout(x)
+
+        x = self.layer_norm(x)
+
+        return x
+
+
+class AttMultiAgg_guide_att(nn.Module):
+    def __init__(self, input_dim, dropout_ratio=0.5):
+        super(AttMultiAgg_guide_att, self).__init__()
+        self.input_dim = input_dim
+        self.dropout_ratio = dropout_ratio
+
+        self.attention = nn.Linear(input_dim, 1, bias=False)
+
+        self.guide = nn.Linear(input_dim, 1, bias=False)
+
+        self.dropout = nn.Dropout(dropout_ratio)
+
+    def forward(self, micro_x, meso_x, macro_x):
+        # Compute attention scores considering all scales
+        alpha_micro = F.softmax(self.attention(micro_x) + self.guide(meso_x) + self.guide(macro_x),
+                                dim=1)
+        alpha_meso = F.softmax(self.attention(meso_x) + self.guide(micro_x) + self.guide(macro_x),
+                               dim=1)
+        alpha_macro = F.softmax(self.attention(macro_x) + self.guide(micro_x) + self.guide(meso_x),
+                                dim=1)
+
+        alpha_micro = self.dropout(alpha_micro)
+        alpha_meso = self.dropout(alpha_meso)
+        alpha_macro = self.dropout(alpha_macro)
+
+        # Weighted sum of embeddings
+        x = alpha_micro * micro_x + alpha_meso * meso_x + alpha_macro * macro_x
+
+        return x
+
+
 class AttMultiAgg_concat(Module):
     """
     对三个尺度的表示进行注意力聚合
@@ -620,28 +722,11 @@ class AttMultiAgg_concat_no_meso(Module):
     （没用dropout，先看效果）
     """
 
-    def __init__(self, input_dim, output_dim, dropout_ratio):
-        """
-        :param input_dim: 等于层次池化层的输出维度，即hidden_dim*2
-        :param output_dim:
-        """
+    def __init__(self):
         super(AttMultiAgg_concat_no_meso, self).__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.lin = nn.Linear(self.input_dim * 2, self.output_dim, bias=False)
-        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
-        self.elu = nn.ELU()
-        self.dropout_layer = nn.Dropout(dropout_ratio)
-        # nn.init.xavier_normal_(self.attention.weight)
 
     def forward(self, micro_x, macro_x):
         x = torch.cat([micro_x, macro_x], dim=1)
-
-        x = self.lin(x)
-
-        x = self.elu(x)
-        if self.training:
-            x = self.dropout_layer(x)
 
         return x
 
@@ -652,28 +737,11 @@ class AttMultiAgg_concat_no_macro(Module):
     （没用dropout，先看效果）
     """
 
-    def __init__(self, input_dim, output_dim, dropout_ratio):
-        """
-        :param input_dim: 等于层次池化层的输出维度，即hidden_dim*2
-        :param output_dim:
-        """
+    def __init__(self):
         super(AttMultiAgg_concat_no_macro, self).__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.lin = nn.Linear(self.input_dim * 2, self.output_dim, bias=False)
-        self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
-        self.elu = nn.ELU()
-        self.dropout_layer = nn.Dropout(dropout_ratio)
-        # nn.init.xavier_normal_(self.attention.weight)
 
     def forward(self, micro_x, meso_x):
         x = torch.cat([micro_x, meso_x], dim=1)
-
-        x = self.lin(x)
-
-        x = self.elu(x)
-        if self.training:
-            x = self.dropout_layer(x)
 
         return x
 
@@ -708,10 +776,9 @@ class AttMultiAgg_concat_att(Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.attention = nn.Linear(self.input_dim * 2, self.input_dim, bias=False)
-        self.lin = nn.Linear(self.input_dim * 3, self.output_dim, bias=False)
         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
-        self.elu = nn.ELU()
         self.dropout_layer = nn.Dropout(dropout_ratio)
+        self.layer_norm = nn.LayerNorm(output_dim)
         # nn.init.xavier_normal_(self.attention.weight)
 
     def forward(self, micro_x, meso_x, macro_x):
@@ -732,12 +799,9 @@ class AttMultiAgg_concat_att(Module):
 
         x = torch.cat([micro_x, meso_x, macro_x], dim=1)
 
-        x = self.lin(x)
-
-        x = self.elu(x)
         if self.training:
             x = self.dropout_layer(x)
-
+        x = self.layer_norm(x)
         return x
 
 

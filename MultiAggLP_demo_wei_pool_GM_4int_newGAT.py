@@ -34,7 +34,7 @@ def setup_seed(seed):
 
 setup_seed(0)
 
-data_name = 'GM_2000_4'
+data_name = 'GM_2000_6'
 num_nodes = 100  # Number of nodes
 num_snaps = 180  # Number of snapshots
 max_thres = 100  # Threshold for maximum edge weight
@@ -58,7 +58,7 @@ num_train_snaps = num_snaps - num_test_snaps - num_val_snaps  # Number of traini
 n_heads = 8
 # =================
 step_interval = 5
-early_stop_epochs = 100
+early_stop_epochs = 70
 # =================
 # loss的超参数
 lambd_cross = 5
@@ -88,7 +88,7 @@ for i in range(num_snaps):
     feat_list.append(feat)
 
 # ================
-data_name = 'GM_2000_4_180'
+data_name = 'GM_2000_6_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []

@@ -8,7 +8,7 @@ import torch
 import pickle
 import torch.optim as optim
 import torch_geometric as tg
-from my_modules.model_concat_noW_noPoolW import MultiAggLP
+from my_modules.model_agg_noW_noPoolW import MultiAggLP
 from my_modules.utils import *
 from my_modules.loss import *
 import scipy.sparse
@@ -34,7 +34,7 @@ def setup_seed(seed):
 
 setup_seed(0)
 
-data_name = 'GM_2000_6'
+data_name = 'GM_2000_4'
 num_nodes = 100  # Number of nodes
 num_snaps = 180  # Number of snapshots
 max_thres = 100  # Threshold for maximum edge weight
@@ -42,7 +42,7 @@ feat_dim = 132  # Dimensionality of node feature
 GAT_output_dim = 128
 micro_dims = [feat_dim, 128, GAT_output_dim]  # 两层GAT的输入维度、隐藏维度，输出维度
 pooling_ratio = 0.8
-agg_feat_dim = GAT_output_dim * 3
+agg_feat_dim = GAT_output_dim
 RNN_dims = [agg_feat_dim, 256, 256]  # 两层GRU的维度
 decoder_dims = [RNN_dims[-1], 256, num_nodes]  # 解码器两层全连接的维度
 save_flag = False
@@ -88,7 +88,7 @@ for i in range(num_snaps):
     feat_list.append(feat)
 
 # ================
-data_name = 'GM_2000_6_180'
+data_name = 'GM_2000_4_180'
 # ==================
 # 创建nx格式的图列表
 graphs = []
@@ -276,7 +276,7 @@ for epoch in range(num_epochs):
           % (epoch, AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
              recall_std))
     # ==========
-    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_concat_noW_noPoolW_binary_rec.txt' % data_name, 'a+')
+    f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_agg_noW_noPoolW_binary_rec.txt' % data_name, 'a+')
     f_input.write('Val #%d Loss %f AUC %f %f f1_score %f %f precision %f %f recall %f %f Time %s\n'
                   % (epoch, loss_mean, AUC_mean, AUC_std, f1_score_mean, f1_score_std,
                      precision_mean, precision_std, recall_mean, recall_std, current_time))
@@ -353,7 +353,7 @@ for epoch in range(num_epochs):
                   AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
                   recall_std, best_AUC))
         # ==========
-        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_concat_noW_noPoolW_binary_rec.txt' % data_name,
+        f_input = open('res/%s_MultiAggLP_norm_weipool_lossadd_step5_lstm256_agg_noW_noPoolW_binary_rec.txt' % data_name,
                        'a+')
         f_input.write('Test AUC %f %f f1_score %f %f precision %f %f recall %f %f best_AUC %f Time %s\n'
                       % (AUC_mean, AUC_std, f1_score_mean, f1_score_std, precision_mean, precision_std, recall_mean,
